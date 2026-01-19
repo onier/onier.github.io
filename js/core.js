@@ -174,6 +174,15 @@ const DesktopSystem = {
         };
         setInterval(update, 1000);
         update();
+    },
+
+    /**
+     * 根据实例ID获取窗口对象
+     * @param {string} instanceId - 窗口实例ID
+     * @returns {Object|null} 窗口对象或null
+     */
+    getWindowById(instanceId) {
+        return this.instances[instanceId] || null;
     }
 };
 
