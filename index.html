@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WinBox Web Desktop v2.0</title>
+    <!-- 引入 WinBox.js -->
+    <script src="https://cdn.jsdelivr.net/npm/winbox@0.2.82/dist/winbox.bundle.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <!-- 桌面图标容器 -->
+    <div id="desktop"></div>
+
+    <!-- 底部任务栏 -->
+    <div id="taskbar">
+        <div class="start-btn">🪟</div>
+        <div id="task-container"></div>
+        <div id="clock">
+            <div id="time">12:00</div>
+            <div id="date">2023/10/01</div>
+        </div>
+    </div>
+
+    <!-- 1. 先引入核心系统 -->
+    <script src="js/core.js"></script>
+
+    <!-- 2. 再引入各个应用模块 (顺序不重要，只要在 core 之后) -->
+    <script src="js/apps/about.js"></script>
+    <script src="js/apps/browser.js"></script>
+    <script src="js/apps/editor.js"></script>
+    <script src="js/apps/settings.js"></script>
+    <script src="js/apps/calculator.js"></script>
+
+    <!-- 
+      提示：如果你想动态加载 JS (例如从服务器获取应用列表)，
+      可以使用 document.createElement('script') 动态插入。
+    -->
+</body>
+
+</html>
