@@ -14,49 +14,70 @@ window.MonicaEditorApp = {
         'c': 'c', 'cpp': 'cpp', 'txt': 'plaintext'
     },
 
+    // --- 获取 HTML 模板 ---
+    getTemplate(instanceId) {
+        return `
+            <div class="editor-layout" style="height: 100%; display: flex; flex-direction: column; background: #1e1e1e;">
+                <div class="editor-toolbar" style="padding: 5px; background: #252526; border-bottom: 1px solid #333;">
+                    <button class="editor-btn" onclick="MonicaEditorApp.openFile('${instanceId}')">📂 打开</button>
+                    <button class="editor-btn" onclick="MonicaEditorApp.saveFile('${instanceId}')">💾 保存</button>
+                    <button class="editor-btn" onclick="MonicaEditorApp.saveAs('${instanceId}')">📑 另存为</button>
+                </div>
+                <!-- Monaco 挂载点 -->
+                <div id="monaco-container-${instanceId}" class="monaco-container" style="flex: 1; overflow: hidden;"></div>
+                <div class="editor-status" style="padding: 0 10px; height: 22px; background: #007acc; color: white; font-size: 12px; line-height: 22px; display: flex; justify-content: space-between;">
+                    <span id="editor-title-${instanceId}">Untitled</span>
+                    <span id="editor-status-${instanceId}">Ready</span>
+                </div>
+            </div>
+        `;
+    },
+
     // 1. 初始化 (创建 DOM -> 加载 Monaco)
     init(instanceId, fileHandle = null) {
-        // 渲染基础 HTML 结构
         const containerId = `monaco-container-${instanceId}`;
         
-        // 异步加载 Monaco 核心
         require(['vs/editor/editor.main'], () => {
             const container = document.getElementById(containerId);
-            if (!container) return;
+            if (!container) {
+                console.error(`Monaco container #${containerId} not found!`);
+                return;
+            }
+
+            // 防止重复初始化
+            if (container.getAttribute('data-initialized') === 'true') return;
+            container.setAttribute('data-initialized', 'true');
 
             // 创建 Monaco 实例
             const editor = monaco.editor.create(container, {
-                value: '', // 初始内容
-                language: 'plaintext', // 初始语言
-                theme: 'vs-dark', // 深色主题
-                automaticLayout: false, // 我们手动处理 layout 以提升性能
-                minimap: { enabled: true }, // 开启代码缩略图
+                value: '', 
+                language: 'plaintext', 
+                theme: 'vs-dark', 
+                automaticLayout: false, 
+                minimap: { enabled: true },
                 fontSize: 14,
                 fontFamily: 'Consolas, "Courier New", monospace',
                 scrollBeyondLastLine: false,
             });
 
-            // 存入状态
             this.instances[instanceId] = {
                 editor: editor,
                 handle: fileHandle,
                 isDirty: false
             };
 
-            // 监听内容变化 (用于标记未保存状态，这里简化处理)
             editor.onDidChangeModelContent(() => {
-                this.instances[instanceId].isDirty = true;
-                this.updateStatus(instanceId, '已修改');
+                if(this.instances[instanceId]) {
+                    this.instances[instanceId].isDirty = true;
+                    this.updateStatus(instanceId, '已修改');
+                }
             });
 
-            // 添加 ResizeObserver 自动调整编辑器大小
-            // WinBox 改变大小时，必须调用 editor.layout()
             const ro = new ResizeObserver(() => {
                 editor.layout();
             });
             ro.observe(container);
 
-            // 如果启动时传入了文件，读取它
             if (fileHandle) {
                 this.readFile(instanceId, fileHandle);
             }
@@ -66,22 +87,22 @@ window.MonicaEditorApp = {
     // 2. 读取文件
     async readFile(instanceId, fileHandle) {
         const state = this.instances[instanceId];
-        if (!state || !state.editor) return;
+        if (!state || !state.editor) {
+            console.error('Editor instance not found:', instanceId);
+            return;
+        }
 
         try {
             const file = await fileHandle.getFile();
             const content = await file.text();
             
-            // 自动检测语言
             const ext = file.name.split('.').pop().toLowerCase();
             const lang = this.langMap[ext] || 'plaintext';
 
-            // 更新编辑器内容和语言模式
             const model = state.editor.getModel();
             monaco.editor.setModelLanguage(model, lang);
             state.editor.setValue(content);
 
-            // 更新状态
             state.handle = fileHandle;
             state.isDirty = false;
             this.updateTitle(instanceId, file.name);
@@ -94,10 +115,16 @@ window.MonicaEditorApp = {
 
     // 3. 打开文件按钮逻辑
     async openFile(instanceId) {
+        // 调试日志，确保 instanceId 正确传递
+        console.log('Opening file for instance:', instanceId);
         try {
             const [handle] = await window.showOpenFilePicker();
             await this.readFile(instanceId, handle);
-        } catch (e) {} // 用户取消
+        } catch (e) {
+            if (e.name !== 'AbortError') {
+                console.error(e);
+            }
+        } 
     },
 
     // 4. 保存文件
@@ -105,7 +132,7 @@ window.MonicaEditorApp = {
         const state = this.instances[instanceId];
         if (!state || !state.editor) return;
 
-        const content = state.editor.getValue(); // 获取 Monaco 内容
+        const content = state.editor.getValue();
 
         if (state.handle) {
             try {
@@ -140,7 +167,6 @@ window.MonicaEditorApp = {
             this.updateTitle(instanceId, handle.name);
             this.updateStatus(instanceId, '已保存');
             
-            // 更新语言高亮
             const ext = handle.name.split('.').pop().toLowerCase();
             const lang = this.langMap[ext] || 'plaintext';
             monaco.editor.setModelLanguage(state.editor.getModel(), lang);
@@ -148,7 +174,6 @@ window.MonicaEditorApp = {
         } catch (e) {}
     },
 
-    // --- UI 辅助 ---
     updateTitle(instanceId, name) {
         const el = document.getElementById(`editor-title-${instanceId}`);
         if(el) el.innerText = name;
@@ -168,30 +193,15 @@ window.MonicaEditorApp = {
             icon: false,
             background: '#252526',
             border: 4,
-            width: '800px', // 宽一点适合写代码
+            width: '800px',
             height: '600px',
             x: 'center', y: 'center',
-            html: `
-                <div class="editor-layout">
-                    <div class="editor-toolbar">
-                        <button class="editor-btn" onclick="MonicaEditorApp.openFile('${instanceId}')">📂 打开</button>
-                        <button class="editor-btn" onclick="MonicaEditorApp.saveFile('${instanceId}')">💾 保存</button>
-                        <button class="editor-btn" onclick="MonicaEditorApp.saveAs('${instanceId}')">📑 另存为</button>
-                    </div>
-                    <!-- Monaco 挂载点 -->
-                    <div id="monaco-container-${instanceId}" class="monaco-container"></div>
-                    <div class="editor-status">
-                        <span id="editor-title-${instanceId}">Untitled</span>
-                        <span id="editor-status-${instanceId}">Ready</span>
-                    </div>
-                </div>
-            `,
+            html: this.getTemplate(instanceId),
             oncreate: () => {
-                // 必须稍微延时，等待 DOM 插入文档流
+                // WinBox 的 oncreate 保证了 DOM 已经存在
                 setTimeout(() => this.init(instanceId, fileHandle), 50);
             },
             onclose: () => {
-                // 销毁 Monaco 实例以释放内存
                 if (this.instances[instanceId] && this.instances[instanceId].editor) {
                     this.instances[instanceId].editor.dispose();
                 }
@@ -207,23 +217,24 @@ DesktopSystem.registerApp({
     title: 'Monaco Editor',
     icon: '📝',
     type: 'html',
-    content: (instanceId) => {
-        // 桌面图标直接点击，打开空编辑器
-        setTimeout(() => {
-             // 这里的逻辑稍微有点绕，因为我们想复用 openInstance 的逻辑
-             // 但 core.js 已经创建了一个窗口。
-             // 简单方案：直接调用 openInstance 创建新窗口，然后让 core.js 的空窗口自动关闭（或者忽略它）
-             // 完美方案：重构 core.js。
-             // 这里使用简单方案：
-             MonicaEditorApp.openInstance(null);
-        }, 100);
+    content: () => {
+        const instanceId = `monaco_desk_${Date.now()}`;
         
-        // 返回一段脚本关闭 core.js 创建的默认窗口 (Hack)
-        return `<script>
-            // 这是一个 Hack，用于关闭 core.js 默认创建的空窗口，
-            // 因为 MonicaEditorApp.openInstance 会自己创建配置更好的 WinBox
-            const myWinBox = document.currentScript.closest('.winbox'); 
-            if(myWinBox) myWinBox.remove(); 
-        </script>`;
+        // 关键修复：不依赖 <script> 标签，而是使用 JS 轮询检测 DOM 元素
+        // 一旦检测到 HTML 被插入页面，立即执行初始化
+        const checkExist = setInterval(() => {
+            const el = document.getElementById(`monaco-container-${instanceId}`);
+            if (el) {
+                clearInterval(checkExist);
+                // 找到元素后，执行初始化
+                MonicaEditorApp.init(instanceId, null);
+            }
+        }, 50); // 每 50ms 检查一次
+
+        // 设置一个超时，防止内存泄漏（比如窗口创建失败）
+        setTimeout(() => clearInterval(checkExist), 10000);
+        
+        // 只返回纯 HTML，不包含无效的 script
+        return MonicaEditorApp.getTemplate(instanceId);
     }
 });
