@@ -8,7 +8,6 @@ const DesktopSystem = {
     instances: {}, // 运行中的窗口实例 { 'instance_1701': WinBoxObj }
     
     init() {
-        this.startClock();
         // 渲染桌面图标（此时可能还没有应用注册，通常由应用加载后自动刷新或手动调用）
         // 这里我们等待 DOM 加载完成后再渲染
         document.addEventListener('DOMContentLoaded', () => {
@@ -73,11 +72,9 @@ const DesktopSystem = {
             height: app.height || '60%',
             x: 'center',
             y: 'center',
-            bottom: 48,
+            bottom: 0,
             
             // 核心生命周期绑定
-            onfocus: () => this.updateTaskbarState(instanceId, true),
-            onblur: () => this.updateTaskbarState(instanceId, false),
             onclose: () => {
                 this.closeInstance(instanceId);
                 return false; // 允许关闭
@@ -99,82 +96,13 @@ const DesktopSystem = {
             winbox: win,
             appId: appId
         };
-
-        // 添加任务栏
-        this.addTaskbarItem(instanceId, app);
     },
 
     // 3. 关闭实例清理
     closeInstance(instanceId) {
         delete this.instances[instanceId];
-        this.removeTaskbarItem(instanceId);
     },
 
-    // 4. 添加任务栏项
-    addTaskbarItem(instanceId, app) {
-        const container = document.getElementById('task-container');
-        const item = document.createElement('div');
-        item.className = 'task-item active';
-        item.id = `task-${instanceId}`;
-        item.innerHTML = `${app.icon} <span>${app.title}</span>`;
-
-        item.onclick = () => {
-            const instance = this.instances[instanceId];
-            if (!instance) return;
-            
-            const win = instance.winbox;
-            
-            if (win.min) {
-                win.restore().focus();
-            } else if (win.focused) { // WinBox 属性判断焦点
-                win.minimize();
-            } else {
-                win.focus();
-            }
-        };
-
-        container.appendChild(item);
-    },
-
-    // 5. 移除任务栏项
-    removeTaskbarItem(instanceId) {
-        const item = document.getElementById(`task-${instanceId}`);
-        if (item) item.remove();
-    },
-
-    // 6. 更新任务栏高亮
-    updateTaskbarState(activeInstanceId, isActive) {
-        // 移除所有 active 样式
-        document.querySelectorAll('.task-item').forEach(el => el.classList.remove('active'));
-
-        // 找到当前激活的实例并高亮
-        // 注意：WinBox 的 onfocus 可能会在点击任务栏时触发，逻辑需互斥
-        if (isActive) {
-            const item = document.getElementById(`task-${activeInstanceId}`);
-            if (item) item.classList.add('active');
-            
-            // 更新内部状态标记
-            if(this.instances[activeInstanceId]) {
-                this.instances[activeInstanceId].winbox.focused = true;
-            }
-        } else {
-             if(this.instances[activeInstanceId]) {
-                this.instances[activeInstanceId].winbox.focused = false;
-            }
-        }
-    },
-
-    startClock() {
-        const update = () => {
-            const now = new Date();
-            const timeEl = document.getElementById('time');
-            const dateEl = document.getElementById('date');
-            if(timeEl) timeEl.innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            if(dateEl) dateEl.innerText = now.toLocaleDateString();
-        };
-        setInterval(update, 1000);
-        update();
-    },
 
     /**
      * 根据实例ID获取窗口对象
