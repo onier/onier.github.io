@@ -142,3 +142,246 @@ body {
 .wb-body {
     background: #fff;
 }
+
+/* --- 5. 文件管理器样式 --- */
+.fm-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #f5f5f5;
+    color: #333;
+}
+
+.fm-toolbar {
+    padding: 8px;
+    background: #e0e0e0;
+    border-bottom: 1px solid #ccc;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.fm-path {
+    flex: 1;
+    background: white;
+    border: 1px solid #ccc;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: #555;
+    border-radius: 2px;
+}
+
+.fm-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+.fm-sidebar {
+    width: 200px;
+    background: #f0f0f0;
+    border-right: 1px solid #ddd;
+    padding: 10px;
+    font-size: 13px;
+}
+
+.fm-details-panel {
+    padding: 10px;
+    background: white;
+    border: 1px solid #ddd;
+    margin-top: 10px;
+    border-radius: 4px;
+    display: none;
+    /* 默认隐藏 */
+}
+
+.fm-content {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    grid-auto-rows: 100px;
+    gap: 10px;
+    align-content: start;
+    background: white;
+}
+
+.fm-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: center;
+}
+
+.fm-item:hover {
+    background: #e5f3ff;
+    border: 1px solid #cce8ff;
+}
+
+.fm-item-icon {
+    font-size: 32px;
+    margin-bottom: 5px;
+}
+
+.fm-item-name {
+    font-size: 12px;
+    word-break: break-all;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* --- 5. 文件管理器 (资源管理器风格) --- */
+.fm-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #fff;
+    font-size: 13px;
+    color: #333;
+}
+
+/* 顶部工具栏 */
+.fm-toolbar {
+    padding: 6px 10px;
+    background: #f0f0f0;
+    border-bottom: 1px solid #d9d9d9;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.fm-address-bar {
+    flex: 1;
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 3px 8px;
+    height: 24px;
+    line-height: 24px;
+    display: flex;
+    align-items: center;
+}
+
+/* 主体分栏容器 */
+.fm-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+/* 左侧：目录树 */
+.fm-tree-panel {
+    width: 220px;
+    min-width: 150px;
+    background: #f5f5f5; /* 略深一点的背景区分 */
+    border-right: 1px solid #d9d9d9;
+    overflow-y: auto;
+    padding: 5px 0;
+    user-select: none;
+}
+
+/* 树节点样式 */
+.tree-node {
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.tree-row {
+    display: flex;
+    align-items: center;
+    padding: 2px 5px;
+    transition: background 0.1s;
+}
+
+.tree-row:hover {
+    background: #e5f3ff;
+}
+
+.tree-row.selected {
+    background: #cce8ff;
+    border: 1px solid #99d1ff;
+    padding: 1px 4px; /* 边框占用像素补偿 */
+}
+
+.tree-indent {
+    display: inline-block;
+    width: 16px; /* 缩进宽度 */
+}
+
+.tree-arrow {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    font-size: 10px;
+    margin-right: 2px;
+    transition: transform 0.1s;
+}
+
+.tree-arrow:hover {
+    color: #000;
+}
+
+.tree-arrow.expanded {
+    transform: rotate(90deg);
+}
+
+.tree-icon {
+    margin-right: 5px;
+}
+
+/* 右侧：详细信息列表 */
+.fm-list-panel {
+    flex: 1;
+    overflow: auto;
+    background: #fff;
+}
+
+/* 表格样式 */
+.fm-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed; /* 固定列宽 */
+}
+
+.fm-table th {
+    background: #fff;
+    border-right: 1px solid #e0e0e0;
+    border-bottom: 1px solid #d9d9d9;
+    padding: 4px 8px;
+    text-align: left;
+    font-weight: normal;
+    color: #666;
+    position: sticky;
+    top: 0;
+    font-size: 12px;
+}
+
+.fm-table th:hover {
+    background: #f2f2f2;
+}
+
+.fm-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid #f0f0f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+}
+
+.fm-table tr:hover {
+    background: #e5f3ff;
+}
+
+.fm-table tr.selected {
+    background: #cce8ff;
+}
