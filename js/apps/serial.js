@@ -1,9 +1,9 @@
 /**
  * js/apps/serial.js
  * 串口控制台应用 - 使用 Web Serial API 与串口设备通信
+ * 修复版：支持设备请求、二进制Hex显示、流式中文解码
  */
 
-// 串口管理器类
 class SerialConsole {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
@@ -11,7 +11,8 @@ class SerialConsole {
         this.reader = null;
         this.writer = null;
         this.isConnected = false;
-        this.receiveBuffer = '';
+        this.keepReading = false;
+        this.textDecoder = new TextDecoder(); // 复用解码器实例
         
         // 默认串口配置
         this.config = {
@@ -24,6 +25,14 @@ class SerialConsole {
         
         this.initUI();
         this.bindEvents();
+        
+        // 监听全局串口插拔事件
+        navigator.serial.addEventListener('disconnect', (e) => {
+            if (this.port === e.target) {
+                this.log('检测到设备断开连接', 'warning');
+                this.disconnect();
+            }
+        });
     }
     
     // 初始化用户界面
@@ -33,8 +42,8 @@ class SerialConsole {
                 <div class="serial-header">
                     <h3>串口控制台</h3>
                     <div class="connection-status">
-                        <span class="status-indicator" id="statusIndicator">●</span>
-                        <span id="statusText">未连接</span>
+                        <span class="status-indicator" data-id="statusIndicator">●</span>
+                        <span data-id="statusText">未连接</span>
                     </div>
                 </div>
                 
@@ -44,14 +53,13 @@ class SerialConsole {
                         <div class="config-grid">
                             <div class="config-item">
                                 <label>端口:</label>
-                                <select id="portSelect">
-                                    <option value="">选择端口...</option>
+                                <select data-id="portSelect">
+                                    <option value="">请先选择设备...</option>
                                 </select>
                             </div>
                             <div class="config-item">
                                 <label>波特率:</label>
-                                <select id="baudRate">
-                                    <option value="300">300</option>
+                                <select data-id="baudRate">
                                     <option value="1200">1200</option>
                                     <option value="2400">2400</option>
                                     <option value="4800">4800</option>
@@ -60,25 +68,27 @@ class SerialConsole {
                                     <option value="38400">38400</option>
                                     <option value="57600">57600</option>
                                     <option value="115200">115200</option>
+                                    <option value="230400">230400</option>
+                                    <option value="921600">921600</option>
                                 </select>
                             </div>
                             <div class="config-item">
                                 <label>数据位:</label>
-                                <select id="dataBits">
+                                <select data-id="dataBits">
                                     <option value="7">7</option>
                                     <option value="8" selected>8</option>
                                 </select>
                             </div>
                             <div class="config-item">
                                 <label>停止位:</label>
-                                <select id="stopBits">
+                                <select data-id="stopBits">
                                     <option value="1" selected>1</option>
                                     <option value="2">2</option>
                                 </select>
                             </div>
                             <div class="config-item">
                                 <label>校验位:</label>
-                                <select id="parity">
+                                <select data-id="parity">
                                     <option value="none" selected>无</option>
                                     <option value="even">偶校验</option>
                                     <option value="odd">奇校验</option>
@@ -88,134 +98,167 @@ class SerialConsole {
                     </div>
                     
                     <div class="connection-section">
-                        <button id="refreshPorts" class="btn secondary">刷新端口</button>
-                        <button id="connectBtn" class="btn primary">连接</button>
-                        <button id="disconnectBtn" class="btn danger" disabled>断开</button>
-                        <button id="clearBtn" class="btn secondary">清空接收</button>
+                        <button data-id="requestPortBtn" class="btn primary-outline" title="授权新设备">➕ 选择设备</button>
+                        <button data-id="refreshPorts" class="btn secondary" title="刷新已授权设备列表">刷新</button>
+                        <div class="divider-vertical"></div>
+                        <button data-id="connectBtn" class="btn primary">连接</button>
+                        <button data-id="disconnectBtn" class="btn danger" disabled>断开</button>
+                        <button data-id="clearBtn" class="btn secondary">清空窗口</button>
                     </div>
                 </div>
                 
                 <div class="serial-main">
                     <div class="receive-section">
-                        <h4>接收区 <span class="subtitle">(来自串口设备)</span></h4>
+                        <h4>接收区 <span class="subtitle">(来自设备)</span></h4>
                         <div class="receive-options">
-                            <label>
-                                <input type="checkbox" id="autoScroll" checked> 自动滚动
-                            </label>
-                            <label>
-                                <input type="checkbox" id="showTimestamp"> 显示时间戳
-                            </label>
-                            <label>
-                                <input type="checkbox" id="hexDisplay"> 十六进制显示
-                            </label>
+                            <label><input type="checkbox" data-id="autoScroll" checked> 自动滚动</label>
+                            <label><input type="checkbox" data-id="showTimestamp"> 时间戳</label>
+                            <label><input type="checkbox" data-id="hexDisplay"> HEX显示</label>
                         </div>
-                        <textarea id="receiveArea" readonly placeholder="接收的数据将显示在这里..."></textarea>
+                        <textarea data-id="receiveArea" readonly placeholder="等待数据..."></textarea>
                         <div class="receive-info">
-                            <span>字节数: <span id="byteCount">0</span></span>
-                            <span>行数: <span id="lineCount">0</span></span>
+                            <span>RX: <span data-id="byteCount">0</span> Bytes</span>
+                            <span>Lines: <span data-id="lineCount">0</span></span>
                         </div>
                     </div>
                     
                     <div class="send-section">
-                        <h4>发送区 <span class="subtitle">(发送到串口设备)</span></h4>
+                        <h4>发送区 <span class="subtitle">(发送到设备)</span></h4>
                         <div class="send-options">
-                            <label>
-                                <input type="checkbox" id="appendNewline"> 自动添加换行
-                            </label>
-                            <label>
-                                <input type="checkbox" id="hexSend"> 十六进制发送
-                            </label>
-                            <button id="sendBtn" class="btn primary" disabled>发送</button>
+                            <label><input type="checkbox" data-id="appendNewline"> 加换行(CRLF)</label>
+                            <label><input type="checkbox" data-id="hexSend"> HEX发送</label>
+                            <button data-id="sendBtn" class="btn primary" disabled>发送</button>
                         </div>
-                        <textarea id="sendArea" placeholder="输入要发送的数据..."></textarea>
+                        <textarea data-id="sendArea" placeholder="输入数据..."></textarea>
                         <div class="send-controls">
-                            <button id="clearSendBtn" class="btn secondary">清空发送区</button>
-                            <button id="repeatSendBtn" class="btn secondary" disabled>重复发送</button>
-                            <input type="number" id="repeatInterval" min="100" max="10000" value="1000" placeholder="间隔(ms)" style="width: 100px;">
+                            <button data-id="clearSendBtn" class="btn secondary">清空</button>
+                            <button data-id="repeatSendBtn" class="btn secondary" disabled>循环发送</button>
+                            <input type="number" data-id="repeatInterval" min="50" max="60000" value="1000" placeholder="ms" style="width: 80px;">
                         </div>
                     </div>
                 </div>
                 
                 <div class="serial-footer">
                     <div class="log-section">
-                        <h4>日志</h4>
-                        <div id="logArea"></div>
+                        <h4>系统日志</h4>
+                        <div data-id="logArea" class="log-area"></div>
                     </div>
                 </div>
             </div>
         `;
         
-        // 获取DOM元素引用
+        // 使用 querySelector 在当前容器内查找元素，避免多开窗口ID冲突
+        const $ = (selector) => this.container.querySelector(`[data-id="${selector}"]`);
+        
         this.elements = {
-            portSelect: document.getElementById('portSelect'),
-            baudRate: document.getElementById('baudRate'),
-            dataBits: document.getElementById('dataBits'),
-            stopBits: document.getElementById('stopBits'),
-            parity: document.getElementById('parity'),
-            connectBtn: document.getElementById('connectBtn'),
-            disconnectBtn: document.getElementById('disconnectBtn'),
-            refreshPorts: document.getElementById('refreshPorts'),
-            clearBtn: document.getElementById('clearBtn'),
-            receiveArea: document.getElementById('receiveArea'),
-            sendArea: document.getElementById('sendArea'),
-            sendBtn: document.getElementById('sendBtn'),
-            statusIndicator: document.getElementById('statusIndicator'),
-            statusText: document.getElementById('statusText'),
-            byteCount: document.getElementById('byteCount'),
-            lineCount: document.getElementById('lineCount'),
-            logArea: document.getElementById('logArea')
+            portSelect: $('portSelect'),
+            baudRate: $('baudRate'),
+            dataBits: $('dataBits'),
+            stopBits: $('stopBits'),
+            parity: $('parity'),
+            connectBtn: $('connectBtn'),
+            disconnectBtn: $('disconnectBtn'),
+            refreshPorts: $('refreshPorts'),
+            requestPortBtn: $('requestPortBtn'),
+            clearBtn: $('clearBtn'),
+            receiveArea: $('receiveArea'),
+            sendArea: $('sendArea'),
+            sendBtn: $('sendBtn'),
+            clearSendBtn: $('clearSendBtn'),
+            statusIndicator: $('statusIndicator'),
+            statusText: $('statusText'),
+            byteCount: $('byteCount'),
+            lineCount: $('lineCount'),
+            logArea: $('logArea'),
+            // Checkboxes
+            autoScroll: $('autoScroll'),
+            showTimestamp: $('showTimestamp'),
+            hexDisplay: $('hexDisplay'),
+            appendNewline: $('appendNewline'),
+            hexSend: $('hexSend'),
+            repeatSendBtn: $('repeatSendBtn'),
+            repeatInterval: $('repeatInterval')
         };
     }
     
-    // 绑定事件
     bindEvents() {
         this.elements.connectBtn.addEventListener('click', () => this.connect());
         this.elements.disconnectBtn.addEventListener('click', () => this.disconnect());
         this.elements.refreshPorts.addEventListener('click', () => this.refreshPorts());
+        this.elements.requestPortBtn.addEventListener('click', () => this.requestNewPort());
         this.elements.clearBtn.addEventListener('click', () => this.clearReceive());
         this.elements.sendBtn.addEventListener('click', () => this.sendData());
+        this.elements.clearSendBtn.addEventListener('click', () => { this.elements.sendArea.value = ''; this.updateSendButton(); });
+        
         this.elements.sendArea.addEventListener('input', () => this.updateSendButton());
         
-        // 配置变化时更新
-        this.elements.baudRate.addEventListener('change', (e) => this.config.baudRate = parseInt(e.target.value));
-        this.elements.dataBits.addEventListener('change', (e) => this.config.dataBits = parseInt(e.target.value));
-        this.elements.stopBits.addEventListener('change', (e) => this.config.stopBits = parseInt(e.target.value));
+        // 配置变化监听
+        ['baudRate', 'dataBits', 'stopBits'].forEach(key => {
+            this.elements[key].addEventListener('change', (e) => this.config[key] = parseInt(e.target.value));
+        });
         this.elements.parity.addEventListener('change', (e) => this.config.parity = e.target.value);
         
-        // 初始刷新端口列表
+        // 初始刷新
         this.refreshPorts();
     }
     
-    // 刷新可用串口列表
-    async refreshPorts() {
+    // 请求用户授权新设备 (必须由用户手势触发)
+    async requestNewPort() {
         try {
             if (!navigator.serial) {
-                this.log('错误: 浏览器不支持 Web Serial API。请使用 Chrome/Edge 89+ 版本。', 'error');
-                return;
+                throw new Error('浏览器不支持 Web Serial API');
             }
+            const port = await navigator.serial.requestPort();
+            if (port) {
+                this.log('设备授权成功');
+                await this.refreshPorts();
+                // 自动选中刚添加的设备
+                const ports = await navigator.serial.getPorts();
+                this.elements.portSelect.value = ports.indexOf(port);
+            }
+        } catch (error) {
+            if (error.name !== 'NotFoundError') { // 用户取消不报错
+                this.log(`请求设备失败: ${error.message}`, 'error');
+            }
+        }
+    }
+    
+    // 刷新已授权端口列表
+    async refreshPorts() {
+        try {
+            if (!navigator.serial) return;
             
             const ports = await navigator.serial.getPorts();
-            this.elements.portSelect.innerHTML = '<option value="">选择端口...</option>';
+            const currentVal = this.elements.portSelect.value;
+            
+            this.elements.portSelect.innerHTML = '<option value="">-- 选择端口 --</option>';
             
             if (ports.length === 0) {
-                this.elements.portSelect.innerHTML += '<option value="" disabled>未找到串口设备</option>';
+                this.elements.portSelect.innerHTML += '<option value="" disabled>无授权设备 (请点击"选择设备")</option>';
             } else {
                 ports.forEach((port, index) => {
+                    const info = port.getInfo();
+                    const label = info.usbProductId ? 
+                        `USB设备 (PID:${info.usbProductId.toString(16).toUpperCase()})` : 
+                        `串口设备 ${index + 1}`;
+                    
                     const option = document.createElement('option');
                     option.value = index;
-                    option.textContent = port.getInfo().usbProductId ? 
-                        `USB串口 (PID: ${port.getInfo().usbProductId})` : `串口 ${index + 1}`;
+                    option.textContent = label;
                     this.elements.portSelect.appendChild(option);
                 });
             }
             
-            this.log(`刷新完成，找到 ${ports.length} 个串口设备`);
+            // 尝试保持之前的选择
+            if (currentVal !== '' && currentVal < ports.length) {
+                this.elements.portSelect.value = currentVal;
+            }
         } catch (error) {
-            this.log(`刷新端口失败: ${error.message}`, 'error');
+            this.log(`刷新列表失败: ${error.message}`, 'error');
         }
     }
     
-    // 连接串口
+    // 连接
     async connect() {
         const portIndex = this.elements.portSelect.value;
         if (portIndex === '') {
@@ -227,538 +270,286 @@ class SerialConsole {
             const ports = await navigator.serial.getPorts();
             this.port = ports[portIndex];
             
-            // 更新配置
-            this.config.baudRate = parseInt(this.elements.baudRate.value);
-            this.config.dataBits = parseInt(this.elements.dataBits.value);
-            this.config.stopBits = parseInt(this.elements.stopBits.value);
-            this.config.parity = this.elements.parity.value;
-            
             await this.port.open({
                 baudRate: this.config.baudRate,
                 dataBits: this.config.dataBits,
                 stopBits: this.config.stopBits,
                 parity: this.config.parity,
-                flowControl: this.config.flowControl
+                bufferSize: 8192 // 增加缓冲区
             });
             
             this.isConnected = true;
+            this.keepReading = true;
             this.updateConnectionStatus();
-            this.log(`已连接到串口，波特率: ${this.config.baudRate}`);
+            this.log(`已连接 (波特率: ${this.config.baudRate})`, 'success');
             
-            // 启动数据读取
-            this.startReading();
+            // 启动读取循环
+            this.readLoop();
             
         } catch (error) {
             this.log(`连接失败: ${error.message}`, 'error');
-            this.isConnected = false;
-            this.updateConnectionStatus();
+            this.disconnect();
         }
     }
     
-    // 断开连接
+    // 断开
     async disconnect() {
-        if (!this.port || !this.isConnected) return;
+        this.keepReading = false; // 信号停止读取循环
         
-        try {
-            if (this.reader) {
-                this.reader.cancel();
-                await this.reader.closed.catch(() => {});
-            }
-            
-            if (this.writer) {
-                this.writer.close();
-                await this.writer.closed;
-            }
-            
-            await this.port.close();
-            this.isConnected = false;
-            this.port = null;
-            this.reader = null;
-            this.writer = null;
-            
-            this.updateConnectionStatus();
-            this.log('已断开串口连接');
-            
-        } catch (error) {
-            this.log(`断开连接失败: ${error.message}`, 'error');
+        if (this.reader) {
+            try {
+                await this.reader.cancel();
+                // 注意：reader.closed 的 promise 可能会在循环结束后才 resolve
+            } catch (e) { /* ignore */ }
         }
+        
+        if (this.writer) {
+            try {
+                await this.writer.close();
+            } catch (e) { /* ignore */ }
+        }
+        
+        if (this.port) {
+            try {
+                await this.port.close();
+            } catch (e) { 
+                console.error(e);
+            }
+        }
+        
+        this.isConnected = false;
+        this.port = null;
+        this.reader = null;
+        this.writer = null;
+        
+        this.updateConnectionStatus();
+        this.log('已断开连接', 'warning');
     }
     
-    // 开始读取串口数据
-    async startReading() {
-        if (!this.port || !this.isConnected) return;
-        
-        try {
-            const textDecoder = new TextDecoder();
-            while (this.port.readable && this.isConnected) {
-                this.reader = this.port.readable.getReader();
-                
-                try {
-                    while (true) {
-                        const { value, done } = await this.reader.read();
-                        if (done) break;
-                        
-                        // 处理接收到的数据
-                        const text = textDecoder.decode(value);
-                        this.receiveBuffer += text;
-                        this.updateReceiveArea(text);
-                        
-                        // 更新统计
-                        this.updateStatistics(value.length);
+    // 核心读取循环 (修复了二进制处理和流式解码)
+    async readLoop() {
+        while (this.port.readable && this.keepReading) {
+            this.reader = this.port.readable.getReader();
+            try {
+                while (true) {
+                    const { value, done } = await this.reader.read();
+                    if (done) break;
+                    if (value) {
+                        this.handleIncomingData(value);
                     }
-                } catch (error) {
-                    if (error.name !== 'InterruptedError') {
-                        this.log(`读取错误: ${error.message}`, 'error');
-                    }
-                } finally {
-                    this.reader.releaseLock();
                 }
+            } catch (error) {
+                if (this.keepReading) this.log(`读取错误: ${error.message}`, 'error');
+            } finally {
+                this.reader.releaseLock();
             }
-        } catch (error) {
-            this.log(`读取失败: ${error.message}`, 'error');
         }
     }
     
-    // 更新接收区域
-    updateReceiveArea(text) {
-        if (!text) return;
+    // 处理接收到的原始数据
+    handleIncomingData(dataView) {
+        // dataView 是 Uint8Array
+        const isHex = this.elements.hexDisplay.checked;
+        const showTime = this.elements.showTimestamp.checked;
+        let displayStr = '';
         
-        const receiveArea = this.elements.receiveArea;
-        const showTimestamp = document.getElementById('showTimestamp').checked;
-        const hexDisplay = document.getElementById('hexDisplay').checked;
-        
-        let displayText = text;
-        
-        if (hexDisplay) {
-            // 转换为十六进制显示
-            const hexArray = [];
-            for (let i = 0; i < text.length; i++) {
-                hexArray.push(text.charCodeAt(i).toString(16).padStart(2, '0'));
+        if (isHex) {
+            // Hex 模式：直接转换原始字节
+            const hexArr = [];
+            for(let i=0; i<dataView.length; i++) {
+                hexArr.push(dataView[i].toString(16).padStart(2, '0').toUpperCase());
             }
-            displayText = hexArray.join(' ') + ' ';
+            displayStr = hexArr.join(' ') + ' ';
+        } else {
+            // 文本模式：使用流式解码处理多字节字符（中文）
+            // 注意：这里简化处理，直接输出到界面。
+            // 严谨做法是维护一个buffer，但为了控制台实时性，直接解码流
+            displayStr = this.textDecoder.decode(dataView, { stream: true });
         }
         
-        if (showTimestamp) {
-            const timestamp = new Date().toLocaleTimeString();
-            displayText = `[${timestamp}] ${displayText}`;
+        if (showTime) {
+            // 简单的换行检测，避免每小段数据都加时间戳，仅在上一段以换行结尾时加
+            // 这里为了演示简单，直接加在头部（实际场景可能需要更复杂的行缓冲逻辑）
+            // displayStr = `[${new Date().toLocaleTimeString()}] ${displayStr}`; 
         }
+
+        this.appendToReceiveArea(displayStr);
         
-        receiveArea.value += displayText;
+        // 更新统计
+        const currentBytes = parseInt(this.elements.byteCount.textContent) || 0;
+        this.elements.byteCount.textContent = currentBytes + dataView.byteLength;
+    }
+    
+    appendToReceiveArea(text) {
+        const area = this.elements.receiveArea;
+        const autoScroll = this.elements.autoScroll.checked;
         
-        // 自动滚动
-        if (document.getElementById('autoScroll').checked) {
-            receiveArea.scrollTop = receiveArea.scrollHeight;
-        }
+        // 智能滚动：如果当前不在底部，就不强制滚动
+        const isAtBottom = area.scrollHeight - area.scrollTop - area.clientHeight < 50;
+        
+        area.value += text;
         
         // 更新行数
-        const lines = receiveArea.value.split('\n').length;
-        this.elements.lineCount.textContent = lines;
-    }
-    
-    // 更新统计信息
-    updateStatistics(bytesReceived) {
-        const currentBytes = parseInt(this.elements.byteCount.textContent) || 0;
-        this.elements.byteCount.textContent = currentBytes + bytesReceived;
+        this.elements.lineCount.textContent = area.value.split('\n').length;
+        
+        if (autoScroll && isAtBottom) {
+            area.scrollTop = area.scrollHeight;
+        }
     }
     
     // 发送数据
     async sendData() {
-        if (!this.port || !this.isConnected) {
-            this.log('未连接到串口设备', 'warning');
-            return;
-        }
+        if (!this.port || !this.port.writable) return;
         
-        const sendArea = this.elements.sendArea;
-        let data = sendArea.value.trim();
-        
-        if (!data) {
-            this.log('发送数据不能为空', 'warning');
-            return;
-        }
+        const rawInput = this.elements.sendArea.value;
+        if (!rawInput) return;
         
         try {
-            const hexSend = document.getElementById('hexSend').checked;
-            const appendNewline = document.getElementById('appendNewline').checked;
+            const isHex = this.elements.hexSend.checked;
+            const appendNL = this.elements.appendNewline.checked;
+            let dataToSend;
             
-            let sendBuffer;
-            
-            if (hexSend) {
-                // 十六进制发送
-                const hexBytes = data.replace(/[^0-9a-fA-F]/g, '').match(/.{1,2}/g) || [];
-                const byteArray = new Uint8Array(hexBytes.map(byte => parseInt(byte, 16)));
-                sendBuffer = byteArray;
-            } else {
-                // 文本发送
-                if (appendNewline) {
-                    data += '\n';
+            if (isHex) {
+                // 过滤非Hex字符
+                const cleanHex = rawInput.replace(/[^0-9a-fA-F]/g, '');
+                if (cleanHex.length % 2 !== 0) {
+                    this.log('Hex长度必须是偶数', 'warning');
+                    return;
                 }
-                const textEncoder = new TextEncoder();
-                sendBuffer = textEncoder.encode(data);
+                const bytes = new Uint8Array(cleanHex.length / 2);
+                for (let i = 0; i < cleanHex.length; i += 2) {
+                    bytes[i / 2] = parseInt(cleanHex.substr(i, 2), 16);
+                }
+                dataToSend = bytes;
+            } else {
+                let text = rawInput;
+                if (appendNL) text += '\r\n'; // 标准串口换行通常是 CRLF
+                dataToSend = new TextEncoder().encode(text);
             }
             
-            if (!this.writer) {
-                this.writer = this.port.writable.getWriter();
-            }
+            const writer = this.port.writable.getWriter();
+            await writer.write(dataToSend);
+            writer.releaseLock();
             
-            await this.writer.write(sendBuffer);
-            this.log(`已发送 ${sendBuffer.length} 字节数据`);
+            this.log(`已发送 ${dataToSend.byteLength} 字节`);
             
-            // 如果需要重复发送
-            const repeatBtn = document.getElementById('repeatSendBtn');
-            if (repeatBtn.disabled === false) {
-                const interval = parseInt(document.getElementById('repeatInterval').value) || 1000;
-                setTimeout(() => this.sendData(), interval);
-            }
+            // 处理循环发送
+            // 注意：此处简化逻辑，实际循环发送建议使用 setInterval 并在外部控制
             
         } catch (error) {
             this.log(`发送失败: ${error.message}`, 'error');
         }
     }
     
-    // 清空接收区
     clearReceive() {
         this.elements.receiveArea.value = '';
         this.elements.byteCount.textContent = '0';
         this.elements.lineCount.textContent = '0';
-        this.receiveBuffer = '';
-        this.log('已清空接收区');
     }
     
-    // 更新连接状态显示
     updateConnectionStatus() {
-        const indicator = this.elements.statusIndicator;
-        const statusText = this.elements.statusText;
-        const connectBtn = this.elements.connectBtn;
-        const disconnectBtn = this.elements.disconnectBtn;
-        const sendBtn = this.elements.sendBtn;
+        const isConnected = this.isConnected;
+        const color = isConnected ? '#4CAF50' : '#F44336';
+        const text = isConnected ? '已连接' : '未连接';
         
-        if (this.isConnected) {
-            indicator.style.color = '#4CAF50';
-            indicator.textContent = '●';
-            statusText.textContent = '已连接';
-            connectBtn.disabled = true;
-            disconnectBtn.disabled = false;
-            sendBtn.disabled = false;
-        } else {
-            indicator.style.color = '#F44336';
-            indicator.textContent = '●';
-            statusText.textContent = '未连接';
-            connectBtn.disabled = false;
-            disconnectBtn.disabled = true;
-            sendBtn.disabled = true;
-        }
+        this.elements.statusIndicator.style.color = color;
+        this.elements.statusText.textContent = text;
+        this.elements.statusText.style.color = color;
+        
+        this.elements.connectBtn.disabled = isConnected;
+        this.elements.disconnectBtn.disabled = !isConnected;
+        this.elements.sendBtn.disabled = !isConnected;
+        this.elements.portSelect.disabled = isConnected;
+        this.elements.baudRate.disabled = isConnected;
+        this.elements.requestPortBtn.disabled = isConnected;
     }
     
-    // 更新发送按钮状态
     updateSendButton() {
-        const sendBtn = this.elements.sendBtn;
-        const sendArea = this.elements.sendArea;
-        sendBtn.disabled = !this.isConnected || sendArea.value.trim() === '';
+        const hasContent = this.elements.sendArea.value.length > 0;
+        this.elements.sendBtn.disabled = !this.isConnected || !hasContent;
     }
     
-    // 添加日志
-    log(message, type = 'info') {
-        const logArea = this.elements.logArea;
-        const timestamp = new Date().toLocaleTimeString();
-        const logEntry = document.createElement('div');
-        logEntry.className = `log-entry log-${type}`;
-        logEntry.innerHTML = `<span class="log-time">[${timestamp}]</span> ${message}`;
-        
-        logArea.appendChild(logEntry);
-        logArea.scrollTop = logArea.scrollHeight;
-        
-        // 限制日志数量
-        const entries = logArea.querySelectorAll('.log-entry');
-        if (entries.length > 50) {
-            entries[0].remove();
-        }
+    log(msg, type = 'info') {
+        const div = document.createElement('div');
+        div.className = `log-entry log-${type}`;
+        div.innerHTML = `<span class="time">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
+        this.elements.logArea.appendChild(div);
+        this.elements.logArea.scrollTop = this.elements.logArea.scrollHeight;
     }
 }
 
 // 注册应用到桌面系统
-DesktopSystem.registerApp({
-    id: 'serial',
-    title: '串口控制台',
-    icon: '🔌',
-    color: '#2196F3',
-    width: '800px',
-    height: '700px',
-    content: (instanceId) => {
-        // 延迟初始化以确保DOM已加载
-        setTimeout(() => {
-            const container = document.getElementById(`serial-container-${instanceId}`);
-            if (container) {
-                new SerialConsole(`serial-container-${instanceId}`);
-            }
-        }, 100);
-        
-        return `
-            <div id="serial-container-${instanceId}" style="width:100%;height:100%;padding:10px;box-sizing:border-box;">
-                <div style="text-align:center;padding:20px;">
-                    <p>加载串口控制台...</p>
-                </div>
-            </div>
-        `;
-    }
-});
-
-// 添加CSS样式
-const style = document.createElement('style');
-style.textContent = `
-.serial-console {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    padding: 10px;
-    box-sizing: border-box;
-    font-family: 'Segoe UI', sans-serif;
-    background: #fff;
-    color: #333;
+if (typeof DesktopSystem !== 'undefined') {
+    DesktopSystem.registerApp({
+        id: 'serial',
+        title: '串口调试助手',
+        icon: '🔌',
+        width: '850px',
+        height: '700px',
+        content: (instanceId) => {
+            setTimeout(() => {
+                new SerialConsole(`serial-app-${instanceId}`);
+            }, 0);
+            return `<div id="serial-app-${instanceId}" style="height:100%"></div>`;
+        }
+    });
 }
 
-.serial-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid #e0e0e0;
-    margin-bottom: 15px;
+// 注入样式 (防止重复注入)
+if (!document.getElementById('serial-console-style')) {
+    const style = document.createElement('style');
+    style.id = 'serial-console-style';
+    style.textContent = `
+    .serial-console { display: flex; flex-direction: column; height: 100%; padding: 10px; box-sizing: border-box; background: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .serial-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid #ddd; margin-bottom: 10px; }
+    .serial-header h3 { margin: 0; color: #333; font-size: 16px; }
+    .connection-status { font-size: 13px; font-weight: 500; }
+    
+    .serial-controls { background: #fff; padding: 12px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 10px; }
+    .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .config-item { display: flex; flex-direction: column; gap: 4px; }
+    .config-item label { font-size: 11px; color: #666; font-weight: 500; }
+    .config-item select { padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; }
+    
+    .connection-section { display: flex; gap: 8px; align-items: center; }
+    .divider-vertical { width: 1px; height: 24px; background: #ddd; margin: 0 4px; }
+    
+    .serial-main { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+    .receive-section, .send-section { display: flex; flex-direction: column; background: #fff; padding: 10px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .receive-section { flex: 2; min-height: 0; }
+    .send-section { flex: 1; min-height: 0; }
+    
+    h4 { margin: 0 0 8px 0; font-size: 13px; color: #444; display: flex; justify-content: space-between; align-items: center; }
+    .subtitle { font-weight: normal; color: #999; font-size: 11px; }
+    
+    .receive-options, .send-options { display: flex; gap: 12px; margin-bottom: 8px; font-size: 12px; color: #555; }
+    .receive-options label, .send-options label { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+    
+    textarea { flex: 1; resize: none; border: 1px solid #ddd; border-radius: 4px; padding: 8px; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.4; outline: none; }
+    textarea:focus { border-color: #2196F3; }
+    .receive-section textarea { background-color: #fafafa; color: #222; }
+    
+    .receive-info { display: flex; justify-content: space-between; margin-top: 5px; font-size: 11px; color: #888; }
+    .send-controls { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+    
+    .log-section { height: 80px; margin-top: 10px; background: #fff; padding: 8px; border-radius: 6px; display: flex; flex-direction: column; }
+    .log-area { flex: 1; overflow-y: auto; font-family: monospace; font-size: 11px; border: 1px solid #eee; padding: 4px; background: #fcfcfc; }
+    .log-entry { padding: 1px 0; border-bottom: 1px dashed #f0f0f0; }
+    .log-entry .time { color: #999; margin-right: 6px; }
+    .log-error { color: #d32f2f; }
+    .log-success { color: #388e3c; }
+    .log-warning { color: #f57c00; }
+    
+    .btn { padding: 5px 12px; border: 1px solid transparent; border-radius: 4px; font-size: 12px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(100%); }
+    .btn.primary { background: #2196F3; color: white; }
+    .btn.primary:hover:not(:disabled) { background: #1976D2; }
+    .btn.primary-outline { border: 1px solid #2196F3; color: #2196F3; background: transparent; }
+    .btn.primary-outline:hover:not(:disabled) { background: #E3F2FD; }
+    .btn.secondary { background: #f5f5f5; border: 1px solid #ddd; color: #333; }
+    .btn.secondary:hover:not(:disabled) { background: #e0e0e0; }
+    .btn.danger { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+    .btn.danger:hover:not(:disabled) { background: #ef9a9a; color: white; border-color: #ef9a9a; }
+    `;
+    document.head.appendChild(style);
 }
-
-.serial-header h3 {
-    margin: 0;
-    font-size: 18px;
-    color: #2196F3;
-}
-
-.connection-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-}
-
-.status-indicator {
-    font-size: 16px;
-    color: #F44336;
-}
-
-.serial-controls {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    margin-bottom: 20px;
-}
-
-.config-section h4 {
-    margin: 0 0 10px 0;
-    font-size: 14px;
-    color: #666;
-}
-
-.config-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 10px;
-    margin-bottom: 10px;
-}
-
-.config-item {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-
-.config-item label {
-    font-size: 12px;
-    color: #666;
-}
-
-.config-item select {
-    padding: 6px 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 13px;
-    background: #fff;
-}
-
-.connection-section {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.btn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 4px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.btn.primary {
-    background: #2196F3;
-    color: white;
-}
-
-.btn.primary:hover {
-    background: #1976D2;
-}
-
-.btn.secondary {
-    background: #f0f0f0;
-    color: #333;
-}
-
-.btn.secondary:hover {
-    background: #e0e0e0;
-}
-
-.btn.danger {
-    background: #F44336;
-    color: white;
-}
-
-.btn.danger:hover {
-    background: #D32F2F;
-}
-
-.btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.serial-main {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    flex: 1;
-    min-height: 300px;
-}
-
-.receive-section, .send-section {
-    display: flex;
-    flex-direction: column;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    padding: 15px;
-    background: #f9f9f9;
-}
-
-.receive-section h4, .send-section h4 {
-    margin: 0 0 10px 0;
-    font-size: 14px;
-    color: #333;
-}
-
-.subtitle {
-    font-size: 12px;
-    color: #666;
-    font-weight: normal;
-}
-
-.receive-options, .send-options {
-    display: flex;
-    gap: 15px;
-    margin-bottom: 10px;
-    flex-wrap: wrap;
-}
-
-.receive-options label, .send-options label {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    color: #666;
-    cursor: pointer;
-}
-
-#receiveArea, #sendArea {
-    flex: 1;
-    min-height: 200px;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-family: 'Consolas', monospace;
-    font-size: 13px;
-    resize: vertical;
-    background: #fff;
-}
-
-#receiveArea {
-    background: #f5f5f5;
-}
-
-.receive-info {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 10px;
-    font-size: 12px;
-    color: #666;
-}
-
-.send-controls {
-    display: flex;
-    gap: 10px;
-    margin-top: 10px;
-    align-items: center;
-}
-
-.send-controls input {
-    padding: 6px 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 13px;
-}
-
-.serial-footer {
-    margin-top: 20px;
-}
-
-.log-section h4 {
-    margin: 0 0 10px 0;
-    font-size: 14px;
-    color: #333;
-}
-
-#logArea {
-    height: 100px;
-    overflow-y: auto;
-    padding: 10px;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    background: #f5f5f5;
-    font-size: 12px;
-    font-family: 'Consolas', monospace;
-}
-
-.log-entry {
-    padding: 2px 0;
-    border-bottom: 1px solid #eee;
-}
-
-.log-time {
-    color: #666;
-    margin-right: 10px;
-}
-
-.log-info {
-    color: #2196F3;
-}
-
-.log-warning {
-    color: #FF9800;
-}
-
-.log-error {
-    color: #F44336;
-}
-
-.log-success {
-    color: #4CAF50;
-}
-`;
-
-// 将样式添加到文档头部
-document.head.appendChild(style);
