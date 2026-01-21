@@ -52,7 +52,7 @@ window.MonicaEditorApp = {
             const editor = monaco.editor.create(container, {
                 value: '', 
                 language: 'plaintext', 
-                theme: 'vs-dark', 
+                theme: 'vs-light', 
                 automaticLayout: false, 
                 minimap: { enabled: true },
                 fontSize: 14,
