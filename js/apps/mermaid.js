@@ -150,32 +150,85 @@
             return `
             <div class="mermaid-layout" id="app-${this.id}">
                 <div class="mermaid-toolbar" id="toolbar-${this.id}">
-                    <div class="btn-group">
-                        <button class="m-btn" data-action="new" title="New">📄 新建</button>
-                        <button class="m-btn" data-action="open" title="Open">📂 打开</button>
-                        <button class="m-btn" data-action="save" title="Save" disabled>💾 保存</button>
-                        <button class="m-btn" data-action="saveAs" title="Save As">📝 另存为</button>
+                    <!-- 文件操作组 -->
+                    <div class="toolbar-section file-actions">
+                        <div class="section-label">文件</div>
+                        <div class="btn-group">
+                            <button class="m-btn primary" data-action="new" title="新建文件">
+                                <span class="btn-icon">📄</span>
+                                <span class="btn-text">新建</span>
+                            </button>
+                            <button class="m-btn" data-action="open" title="打开文件">
+                                <span class="btn-icon">📂</span>
+                                <span class="btn-text">打开</span>
+                            </button>
+                            <button class="m-btn" data-action="save" title="保存文件" disabled>
+                                <span class="btn-icon">💾</span>
+                                <span class="btn-text">保存</span>
+                            </button>
+                            <button class="m-btn" data-action="saveAs" title="另存为">
+                                <span class="btn-icon">📝</span>
+                                <span class="btn-text">另存为</span>
+                            </button>
+                        </div>
                     </div>
-                    <div class="separator"></div>
-                    <select class="m-select" data-action="theme">
-                        <option value="default">默认主题</option>
-                        <option value="dark">暗色主题</option>
-                        <option value="forest">森林主题</option>
-                        <option value="neutral">中性主题</option>
-                        <option value="base">基础主题</option>
-                    </select>
-                    <select class="m-select" data-action="template">
-                        <option value="">插入模板...</option>
-                        ${Object.keys(TEMPLATES).map(k => `<option value="${k}">${k.toUpperCase()}</option>`).join('')}
-                    </select>
-                    <div class="separator"></div>
-                    <div class="btn-group">
-                        <button class="m-btn" data-action="exportSvg">🖼️ SVG</button>
-                        <button class="m-btn" data-action="exportPng">📸 PNG</button>
-                        <button class="m-btn" data-action="copy">📋 复制</button>
+                    
+                    <div class="toolbar-divider"></div>
+                    
+                    <!-- 编辑功能组 -->
+                    <div class="toolbar-section edit-actions">
+                        <div class="section-label">编辑</div>
+                        <div class="btn-group">
+                            <div class="select-wrapper">
+                                <select class="m-select" data-action="theme" title="选择主题">
+                                    <option value="default">默认主题</option>
+                                    <option value="dark">暗色主题</option>
+                                    <option value="forest">森林主题</option>
+                                    <option value="neutral">中性主题</option>
+                                    <option value="base">基础主题</option>
+                                </select>
+                                <span class="select-arrow">▼</span>
+                            </div>
+                            <div class="select-wrapper">
+                                <select class="m-select" data-action="template" title="插入模板">
+                                    <option value="">插入模板...</option>
+                                    ${Object.keys(TEMPLATES).map(k => `<option value="${k}">${k.charAt(0).toUpperCase() + k.slice(1)}</option>`).join('')}
+                                </select>
+                                <span class="select-arrow">▼</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="spacer"></div>
-                    <span class="status-text" id="status-${this.id}">初始化中...</span>
+                    
+                    <div class="toolbar-divider"></div>
+                    
+                    <!-- 导出功能组 -->
+                    <div class="toolbar-section export-actions">
+                        <div class="section-label">导出</div>
+                        <div class="btn-group">
+                            <button class="m-btn success" data-action="exportSvg" title="导出为SVG">
+                                <span class="btn-icon">🖼️</span>
+                                <span class="btn-text">SVG</span>
+                            </button>
+                            <button class="m-btn success" data-action="exportPng" title="导出为PNG">
+                                <span class="btn-icon">📸</span>
+                                <span class="btn-text">PNG</span>
+                            </button>
+                            <button class="m-btn" data-action="copy" title="复制代码">
+                                <span class="btn-icon">📋</span>
+                                <span class="btn-text">复制</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="toolbar-spacer"></div>
+                    
+                    <!-- 状态显示 -->
+                    <div class="toolbar-section status-section">
+                        <div class="status-container">
+                            <span class="status-text" id="status-${this.id}">初始化中...</span>
+                            <div class="status-indicator"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="mermaid-workspace">
@@ -477,29 +530,374 @@
         injectStyles() {
             if (document.getElementById('mermaid-pro-styles')) return;
             const css = `
-                .mermaid-layout { display: flex; flex-direction: column; height: 100%; background: #f9f9f9; font-family: 'Segoe UI', sans-serif; }
-                .mermaid-toolbar { padding: 8px; background: #fff; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-                .mermaid-workspace { flex: 1; display: flex; overflow: hidden; padding: 10px; gap: 10px; }
-                .mermaid-footer { padding: 5px 12px; background: #fff; border-top: 1px solid #e0e0e0; font-size: 11px; color: #666; display: flex; justify-content: space-between; }
-                .m-btn { padding: 5px 10px; border: 1px solid #dcdcdc; background: #fff; border-radius: 4px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px; transition: all 0.1s; }
-                .m-btn:hover:not(:disabled) { background: #f0f0f0; border-color: #bbb; }
-                .m-btn:disabled { opacity: 0.5; cursor: default; }
-                .m-select { padding: 4px; border: 1px solid #dcdcdc; border-radius: 4px; font-size: 12px; }
-                .separator { width: 1px; height: 18px; background: #e0e0e0; margin: 0 4px; }
-                .spacer { flex: 1; }
-                .editor-pane, .preview-pane { flex: 1; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; display: flex; flex-direction: column; overflow: hidden; position: relative; }
-                .pane-header { padding: 6px 10px; background: #f5f5f5; border-bottom: 1px solid #e0e0e0; font-size: 12px; font-weight: 600; color: #555; display: flex; justify-content: space-between; align-items: center; }
-                .code-editor { flex: 1; border: none; padding: 10px; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; resize: none; outline: none; }
-                .preview-viewport { flex: 1; overflow: hidden; position: relative; cursor: grab; background: #fff; }
-                .preview-content { transform-origin: 0 0; padding: 20px; min-height: 100%; box-sizing: border-box; }
-                .mermaid-diagram { width: 100%; height: 100%; }
-                .zoom-tools { position: absolute; bottom: 10px; right: 10px; display: flex; flex-direction: column; gap: 4px; }
-                .mini-btn { padding: 2px 6px; background: rgba(255,255,255,0.9); border: 1px solid #ccc; border-radius: 3px; cursor: pointer; font-size: 10px; }
-                .status-text { font-size: 12px; color: #666; }
-                .status-success { color: #28a745; }
-                .status-error { color: #dc3545; }
-                .status-loading { color: #007bff; }
-                .error-box { position: absolute; bottom: 0; left: 0; right: 0; background: #fff0f0; color: #d00; padding: 8px; font-size: 11px; border-top: 1px solid #ffd0d0; display: none; max-height: 80px; overflow-y: auto; }
+                .mermaid-layout { 
+                    display: flex; 
+                    flex-direction: column; 
+                    height: 100%; 
+                    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+                    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif; 
+                }
+                
+                /* 工具栏主容器 */
+                .mermaid-toolbar { 
+                    padding: 10px 16px; 
+                    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+                    border-bottom: 1px solid #e2e8f0; 
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+                    display: flex; 
+                    align-items: center; 
+                    gap: 12px; 
+                    flex-wrap: wrap;
+                    min-height: 56px;
+                    box-sizing: border-box;
+                }
+                
+                /* 工具栏分区 */
+                .toolbar-section {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 4px 8px;
+                    border-radius: 6px;
+                    background: rgba(241, 245, 249, 0.5);
+                    transition: background 0.2s;
+                }
+                
+                .toolbar-section:hover {
+                    background: rgba(226, 232, 240, 0.7);
+                }
+                
+                .section-label {
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: #64748b;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    padding: 2px 6px;
+                    background: #e2e8f0;
+                    border-radius: 4px;
+                    white-space: nowrap;
+                }
+                
+                /* 按钮组 */
+                .btn-group {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                }
+                
+                /* 按钮样式 */
+                .m-btn { 
+                    padding: 6px 12px; 
+                    border: 1px solid #cbd5e1; 
+                    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+                    border-radius: 6px; 
+                    cursor: pointer; 
+                    font-size: 12px; 
+                    display: flex; 
+                    align-items: center; 
+                    gap: 6px; 
+                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                    color: #334155;
+                    font-weight: 500;
+                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+                    position: relative;
+                    overflow: hidden;
+                }
+                
+                .m-btn::before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
+                    opacity: 0;
+                    transition: opacity 0.2s;
+                }
+                
+                .m-btn:hover:not(:disabled) { 
+                    background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+                    border-color: #94a3b8; 
+                    transform: translateY(-1px);
+                    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+                }
+                
+                .m-btn:active:not(:disabled) {
+                    transform: translateY(0);
+                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+                }
+                
+                .m-btn.primary {
+                    background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+                    border-color: #1d4ed8;
+                    color: white;
+                }
+                
+                .m-btn.primary:hover:not(:disabled) {
+                    background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+                    border-color: #1e40af;
+                }
+                
+                .m-btn.success {
+                    background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+                    border-color: #047857;
+                    color: white;
+                }
+                
+                .m-btn.success:hover:not(:disabled) {
+                    background: linear-gradient(180deg, #059669 0%, #047857 100%);
+                    border-color: #065f46;
+                }
+                
+                .m-btn:disabled { 
+                    opacity: 0.5; 
+                    cursor: not-allowed;
+                    transform: none !important;
+                    box-shadow: none !important;
+                }
+                
+                .btn-icon {
+                    font-size: 14px;
+                    line-height: 1;
+                }
+                
+                .btn-text {
+                    white-space: nowrap;
+                }
+                
+                /* 选择框样式 */
+                .select-wrapper {
+                    position: relative;
+                    display: inline-block;
+                }
+                
+                .m-select { 
+                    padding: 6px 28px 6px 10px; 
+                    border: 1px solid #cbd5e1; 
+                    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+                    border-radius: 6px; 
+                    font-size: 12px; 
+                    color: #334155;
+                    font-weight: 500;
+                    cursor: pointer;
+                    appearance: none;
+                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+                    transition: all 0.2s;
+                    min-width: 120px;
+                }
+                
+                .m-select:hover {
+                    border-color: #94a3b8;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+                }
+                
+                .m-select:focus {
+                    outline: none;
+                    border-color: #3b82f6;
+                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+                }
+                
+                .select-arrow {
+                    position: absolute;
+                    right: 8px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    font-size: 10px;
+                    color: #64748b;
+                    pointer-events: none;
+                }
+                
+                /* 分隔符 */
+                .toolbar-divider {
+                    width: 1px;
+                    height: 24px;
+                    background: linear-gradient(180deg, transparent 0%, #cbd5e1 50%, transparent 100%);
+                    margin: 0 4px;
+                }
+                
+                /* 间距 */
+                .toolbar-spacer {
+                    flex: 1;
+                }
+                
+                /* 状态区域 */
+                .status-container {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 4px 10px;
+                    background: white;
+                    border-radius: 6px;
+                    border: 1px solid #e2e8f0;
+                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+                }
+                
+                .status-text { 
+                    font-size: 12px; 
+                    color: #475569;
+                    font-weight: 500;
+                    white-space: nowrap;
+                }
+                
+                .status-success { color: #059669; }
+                .status-error { color: #dc2626; }
+                .status-loading { color: #2563eb; }
+                
+                .status-indicator {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    background: #94a3b8;
+                    animation: pulse 2s infinite;
+                }
+                
+                .status-success .status-indicator { background: #10b981; }
+                .status-error .status-indicator { background: #ef4444; }
+                .status-loading .status-indicator { 
+                    background: #3b82f6;
+                    animation: spin 1s linear infinite;
+                }
+                
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.5; }
+                }
+                
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+                
+                /* 工作区样式 */
+                .mermaid-workspace { 
+                    flex: 1; 
+                    display: flex; 
+                    overflow: hidden; 
+                    padding: 12px; 
+                    gap: 12px; 
+                    background: transparent;
+                }
+                
+                .mermaid-footer { 
+                    padding: 8px 16px; 
+                    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+                    border-top: 1px solid #e2e8f0; 
+                    font-size: 11px; 
+                    color: #64748b; 
+                    display: flex; 
+                    justify-content: space-between;
+                    font-weight: 500;
+                }
+                
+                /* 编辑器面板 */
+                .editor-pane, .preview-pane { 
+                    flex: 1; 
+                    background: #ffffff; 
+                    border: 1px solid #e2e8f0; 
+                    border-radius: 8px; 
+                    display: flex; 
+                    flex-direction: column; 
+                    overflow: hidden; 
+                    position: relative;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+                }
+                
+                .pane-header { 
+                    padding: 8px 12px; 
+                    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+                    border-bottom: 1px solid #e2e8f0; 
+                    font-size: 12px; 
+                    font-weight: 600; 
+                    color: #475569; 
+                    display: flex; 
+                    justify-content: space-between; 
+                    align-items: center;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                
+                .code-editor { 
+                    flex: 1; 
+                    border: none; 
+                    padding: 12px; 
+                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace; 
+                    font-size: 13px; 
+                    line-height: 1.6; 
+                    resize: none; 
+                    outline: none;
+                    background: #ffffff;
+                    color: #334155;
+                }
+                
+                .code-editor:focus {
+                    background: #fafafa;
+                }
+                
+                .preview-viewport { 
+                    flex: 1; 
+                    overflow: hidden; 
+                    position: relative; 
+                    cursor: grab; 
+                    background: #ffffff;
+                }
+                
+                .preview-content { 
+                    transform-origin: 0 0; 
+                    padding: 24px; 
+                    min-height: 100%; 
+                    box-sizing: border-box;
+                    background: #ffffff;
+                }
+                
+                .mermaid-diagram { 
+                    width: 100%; 
+                    height: 100%; 
+                }
+                
+                .zoom-tools { 
+                    position: absolute; 
+                    bottom: 12px; 
+                    right: 12px; 
+                    display: flex; 
+                    flex-direction: column; 
+                    gap: 4px; 
+                }
+                
+                .mini-btn { 
+                    padding: 4px 8px; 
+                    background: rgba(255,255,255,0.95); 
+                    border: 1px solid #cbd5e1; 
+                    border-radius: 4px; 
+                    cursor: pointer; 
+                    font-size: 11px;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                    transition: all 0.2s;
+                }
+                
+                .mini-btn:hover {
+                    background: #f1f5f9;
+                    transform: translateY(-1px);
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+                }
+                
+                .error-box { 
+                    position: absolute; 
+                    bottom: 0; 
+                    left: 0; 
+                    right: 0; 
+                    background: #fef2f2; 
+                    color: #dc2626; 
+                    padding: 10px; 
+                    font-size: 11px; 
+                    border-top: 1px solid #fecaca; 
+                    display: none; 
+                    max-height: 100px; 
+                    overflow-y: auto;
+                    font-family: 'Consolas', monospace;
+                    border-radius: 0 0 8px 8px;
+                }
             `;
             const style = document.createElement('style');
             style.id = 'mermaid-pro-styles';
