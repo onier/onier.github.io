@@ -1,7 +1,8 @@
 /**
  * js/apps/mermaid.js
- * Mermaid Editor Pro (AMD 冲突修复版)
+ * Mermaid Editor Pro (AMD 冲突修复版 + 分隔条增强)
  * 修复：loader.min.js 导致的 define 冲突
+ * 新增：可拖动调整宽度的分隔条
  */
 
 (function() {
@@ -9,7 +10,6 @@
     // 1. 配置与常量
     // ==========================================
     const CONFIG = {
-        // 依然使用 v9.4.3，兼容性最好
         cdn: 'https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js',
         defaultTheme: 'default',
         debounceTime: 500,
@@ -29,7 +29,7 @@
     };
 
     // ==========================================
-    // 2. 核心服务 - 修复了加载器冲突
+    // 2. 核心服务
     // ==========================================
     
     const LibraryLoader = {
@@ -38,13 +38,11 @@
 
         load() {
             return new Promise((resolve, reject) => {
-                // 1. 如果已存在，直接返回
                 if (window.mermaid) {
                     this.status = 'loaded';
                     return resolve(window.mermaid);
                 }
                 
-                // 2. 处理队列
                 if (this.status === 'loaded') return resolve(window.mermaid);
                 if (this.status === 'loading') {
                     this.queue.push({ resolve, reject });
@@ -54,19 +52,15 @@
                 this.status = 'loading';
                 console.log('[Mermaid] Loading library...');
                 
-                // ============================================================
-                // 核心修复：绕过 AMD 加载器 (RequireJS/Monaco loader)
-                // ============================================================
-                const __define = window.define; // 保存原有的 define
-                window.define = undefined;      // 暂时屏蔽 define，强制 UMD 走 window 挂载模式
+                // 核心修复：绕过 AMD 加载器
+                const __define = window.define; 
+                window.define = undefined;      
                 
                 const script = document.createElement('script');
                 script.src = CONFIG.cdn;
                 
                 script.onload = () => {
-                    // 恢复环境
                     window.define = __define;
-                    
                     if (window.mermaid) {
                         console.log('[Mermaid] Library loaded successfully.');
                         try {
@@ -83,7 +77,7 @@
                 };
                 
                 script.onerror = (err) => {
-                    window.define = __define; // 出错也要恢复环境
+                    window.define = __define;
                     this.handleError(err);
                 };
                 
@@ -147,6 +141,8 @@
 
         getHTML() {
             this.injectStyles();
+            // [优化] 增加了 ID 标识，方便 JS 获取 DOM
+            // [新增] 增加了 layout-resizer 分隔条
             return `
             <div class="mermaid-layout" id="app-${this.id}">
                 <div class="mermaid-toolbar" id="toolbar-${this.id}">
@@ -155,20 +151,16 @@
                         <div class="section-label">文件</div>
                         <div class="btn-group">
                             <button class="m-btn primary" data-action="new" title="新建文件">
-                                <span class="btn-icon">📄</span>
-                                <span class="btn-text">新建</span>
+                                <span class="btn-icon">📄</span><span class="btn-text">新建</span>
                             </button>
                             <button class="m-btn" data-action="open" title="打开文件">
-                                <span class="btn-icon">📂</span>
-                                <span class="btn-text">打开</span>
+                                <span class="btn-icon">📂</span><span class="btn-text">打开</span>
                             </button>
                             <button class="m-btn" data-action="save" title="保存文件" disabled>
-                                <span class="btn-icon">💾</span>
-                                <span class="btn-text">保存</span>
+                                <span class="btn-icon">💾</span><span class="btn-text">保存</span>
                             </button>
                             <button class="m-btn" data-action="saveAs" title="另存为">
-                                <span class="btn-icon">📝</span>
-                                <span class="btn-text">另存为</span>
+                                <span class="btn-icon">📝</span><span class="btn-text">另存为</span>
                             </button>
                         </div>
                     </div>
@@ -206,16 +198,13 @@
                         <div class="section-label">导出</div>
                         <div class="btn-group">
                             <button class="m-btn success" data-action="exportSvg" title="导出为SVG">
-                                <span class="btn-icon">🖼️</span>
-                                <span class="btn-text">SVG</span>
+                                <span class="btn-icon">🖼️</span><span class="btn-text">SVG</span>
                             </button>
                             <button class="m-btn success" data-action="exportPng" title="导出为PNG">
-                                <span class="btn-icon">📸</span>
-                                <span class="btn-text">PNG</span>
+                                <span class="btn-icon">📸</span><span class="btn-text">PNG</span>
                             </button>
                             <button class="m-btn" data-action="copy" title="复制代码">
-                                <span class="btn-icon">📋</span>
-                                <span class="btn-text">复制</span>
+                                <span class="btn-icon">📋</span><span class="btn-text">复制</span>
                             </button>
                         </div>
                     </div>
@@ -231,11 +220,17 @@
                     </div>
                 </div>
 
-                <div class="mermaid-workspace">
-                    <div class="editor-pane">
+                <div class="mermaid-workspace" id="workspace-${this.id}">
+                    <!-- 左侧编辑区 -->
+                    <div class="editor-pane" id="editor-pane-${this.id}">
                         <div class="pane-header">Code</div>
                         <textarea id="editor-${this.id}" class="code-editor" spellcheck="false" placeholder="Enter Mermaid code..."></textarea>
                     </div>
+                    
+                    <!-- [新增] 分隔条 -->
+                    <div class="layout-resizer" id="resizer-${this.id}"></div>
+
+                    <!-- 右侧预览区 -->
                     <div class="preview-pane" id="preview-pane-${this.id}">
                         <div class="pane-header">
                             Preview
@@ -262,8 +257,13 @@
         }
 
         mount() {
+            // [优化] 集中缓存 DOM 元素
             this.dom = {
                 app: document.getElementById(`app-${this.id}`),
+                workspace: document.getElementById(`workspace-${this.id}`),
+                editorPane: document.getElementById(`editor-pane-${this.id}`),
+                previewPane: document.getElementById(`preview-pane-${this.id}`),
+                resizer: document.getElementById(`resizer-${this.id}`),
                 editor: document.getElementById(`editor-${this.id}`),
                 diagram: document.getElementById(`diagram-${this.id}`),
                 viewport: document.getElementById(`viewport-${this.id}`),
@@ -277,6 +277,7 @@
             if (!this.dom.editor) return;
 
             this.bindEvents();
+            this.bindResizer(); // [新增] 绑定分隔条事件
             this.setStatus('正在加载核心库...', 'loading');
             
             LibraryLoader.load()
@@ -289,6 +290,57 @@
                     this.setStatus('核心库加载失败', 'error');
                     this.showError(err.message);
                 });
+        }
+
+        // [新增] 分隔条拖动逻辑
+        bindResizer() {
+            const { resizer, workspace, editorPane, previewPane } = this.dom;
+            if (!resizer || !workspace) return;
+
+            let isResizing = false;
+            let startX = 0;
+            let startWidth = 0;
+
+            const onMouseDown = (e) => {
+                isResizing = true;
+                startX = e.clientX;
+                startWidth = editorPane.getBoundingClientRect().width;
+                
+                resizer.classList.add('active');
+                document.body.classList.add('is-resizing'); // 添加全局样式防止选中文字
+                
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            };
+
+            const onMouseMove = (e) => {
+                if (!isResizing) return;
+                e.preventDefault();
+
+                // 使用 requestAnimationFrame 优化性能
+                requestAnimationFrame(() => {
+                    const deltaX = e.clientX - startX;
+                    const newWidth = startWidth + deltaX;
+                    const totalWidth = workspace.clientWidth;
+
+                    // 限制最小宽度 (200px)
+                    if (newWidth > 200 && newWidth < totalWidth - 200) {
+                        editorPane.style.flex = `0 0 ${newWidth}px`;
+                        previewPane.style.flex = '1'; // 右侧自适应
+                    }
+                });
+            };
+
+            const onMouseUp = () => {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.classList.remove('is-resizing');
+                
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+
+            resizer.addEventListener('mousedown', onMouseDown);
         }
 
         bindEvents() {
@@ -387,7 +439,6 @@
                 window.mermaid.initialize({ ...CONFIG.mermaid, theme: this.currentTheme });
                 const id = `graph-${this.id}-${Date.now()}`;
                 
-                // v9 兼容渲染
                 window.mermaid.render(id, content, (svgCode) => {
                     this.dom.diagram.innerHTML = svgCode;
                     this.dom.error.style.display = 'none';
@@ -538,365 +589,135 @@
                     font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif; 
                 }
                 
-                /* 工具栏主容器 */
+                /* 工具栏 */
                 .mermaid-toolbar { 
                     padding: 10px 16px; 
                     background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
                     border-bottom: 1px solid #e2e8f0; 
                     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-                    display: flex; 
-                    align-items: center; 
-                    gap: 12px; 
-                    flex-wrap: wrap;
-                    min-height: 56px;
-                    box-sizing: border-box;
+                    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+                    min-height: 56px; box-sizing: border-box;
                 }
-                
-                /* 工具栏分区 */
                 .toolbar-section {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    padding: 4px 8px;
-                    border-radius: 6px;
-                    background: rgba(241, 245, 249, 0.5);
+                    display: flex; align-items: center; gap: 8px; padding: 4px 8px;
+                    border-radius: 6px; background: rgba(241, 245, 249, 0.5);
                     transition: background 0.2s;
                 }
-                
-                .toolbar-section:hover {
-                    background: rgba(226, 232, 240, 0.7);
-                }
-                
+                .toolbar-section:hover { background: rgba(226, 232, 240, 0.7); }
                 .section-label {
-                    font-size: 11px;
-                    font-weight: 600;
-                    color: #64748b;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                    padding: 2px 6px;
-                    background: #e2e8f0;
-                    border-radius: 4px;
-                    white-space: nowrap;
+                    font-size: 11px; font-weight: 600; color: #64748b;
+                    text-transform: uppercase; letter-spacing: 0.5px;
+                    padding: 2px 6px; background: #e2e8f0; border-radius: 4px;
                 }
+                .btn-group { display: flex; align-items: center; gap: 6px; }
+                .toolbar-divider { width: 1px; height: 24px; background: #cbd5e1; margin: 0 4px; }
+                .toolbar-spacer { flex: 1; }
                 
-                /* 按钮组 */
-                .btn-group {
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                }
-                
-                /* 按钮样式 */
+                /* 按钮与输入框 */
                 .m-btn { 
-                    padding: 6px 12px; 
-                    border: 1px solid #cbd5e1; 
+                    padding: 6px 12px; border: 1px solid #cbd5e1; 
                     background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-                    border-radius: 6px; 
-                    cursor: pointer; 
-                    font-size: 12px; 
-                    display: flex; 
-                    align-items: center; 
-                    gap: 6px; 
-                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-                    color: #334155;
-                    font-weight: 500;
-                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-                    position: relative;
-                    overflow: hidden;
+                    border-radius: 6px; cursor: pointer; font-size: 12px; 
+                    display: flex; align-items: center; gap: 6px; 
+                    transition: all 0.2s; color: #334155; font-weight: 500;
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
                 }
-                
-                .m-btn::before {
-                    content: '';
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
-                    opacity: 0;
-                    transition: opacity 0.2s;
-                }
-                
                 .m-btn:hover:not(:disabled) { 
-                    background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
-                    border-color: #94a3b8; 
-                    transform: translateY(-1px);
-                    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+                    background: #f1f5f9; border-color: #94a3b8; transform: translateY(-1px);
+                    box-shadow: 0 3px 6px rgba(0,0,0,0.08);
                 }
-                
-                .m-btn:active:not(:disabled) {
-                    transform: translateY(0);
-                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-                }
-                
-                .m-btn.primary {
-                    background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
-                    border-color: #1d4ed8;
-                    color: white;
-                }
-                
-                .m-btn.primary:hover:not(:disabled) {
-                    background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
-                    border-color: #1e40af;
-                }
-                
-                .m-btn.success {
-                    background: linear-gradient(180deg, #10b981 0%, #059669 100%);
-                    border-color: #047857;
-                    color: white;
-                }
-                
-                .m-btn.success:hover:not(:disabled) {
-                    background: linear-gradient(180deg, #059669 0%, #047857 100%);
-                    border-color: #065f46;
-                }
-                
-                .m-btn:disabled { 
-                    opacity: 0.5; 
-                    cursor: not-allowed;
-                    transform: none !important;
-                    box-shadow: none !important;
-                }
-                
-                .btn-icon {
-                    font-size: 14px;
-                    line-height: 1;
-                }
-                
-                .btn-text {
-                    white-space: nowrap;
-                }
-                
-                /* 选择框样式 */
-                .select-wrapper {
-                    position: relative;
-                    display: inline-block;
-                }
+                .m-btn.primary { background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%); border-color: #1d4ed8; color: white; }
+                .m-btn.primary:hover:not(:disabled) { background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%); }
+                .m-btn.success { background: linear-gradient(180deg, #10b981 0%, #059669 100%); border-color: #047857; color: white; }
+                .m-btn.success:hover:not(:disabled) { background: linear-gradient(180deg, #059669 0%, #047857 100%); }
+                .m-btn:disabled { opacity: 0.5; cursor: not-allowed; }
                 
                 .m-select { 
-                    padding: 6px 28px 6px 10px; 
-                    border: 1px solid #cbd5e1; 
-                    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-                    border-radius: 6px; 
-                    font-size: 12px; 
-                    color: #334155;
-                    font-weight: 500;
-                    cursor: pointer;
-                    appearance: none;
-                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-                    transition: all 0.2s;
+                    padding: 6px 28px 6px 10px; border: 1px solid #cbd5e1; 
+                    background: white; border-radius: 6px; font-size: 12px; 
+                    color: #334155; cursor: pointer; appearance: none;
                     min-width: 120px;
                 }
+                .select-wrapper { position: relative; display: inline-block; }
+                .select-arrow { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 10px; color: #64748b; pointer-events: none; }
                 
-                .m-select:hover {
-                    border-color: #94a3b8;
-                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-                }
-                
-                .m-select:focus {
-                    outline: none;
-                    border-color: #3b82f6;
-                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-                }
-                
-                .select-arrow {
-                    position: absolute;
-                    right: 8px;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    font-size: 10px;
-                    color: #64748b;
-                    pointer-events: none;
-                }
-                
-                /* 分隔符 */
-                .toolbar-divider {
-                    width: 1px;
-                    height: 24px;
-                    background: linear-gradient(180deg, transparent 0%, #cbd5e1 50%, transparent 100%);
-                    margin: 0 4px;
-                }
-                
-                /* 间距 */
-                .toolbar-spacer {
-                    flex: 1;
-                }
-                
-                /* 状态区域 */
+                /* 状态栏 */
                 .status-container {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    padding: 4px 10px;
-                    background: white;
-                    border-radius: 6px;
-                    border: 1px solid #e2e8f0;
-                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+                    display: flex; align-items: center; gap: 8px; padding: 4px 10px;
+                    background: white; border-radius: 6px; border: 1px solid #e2e8f0;
                 }
-                
-                .status-text { 
-                    font-size: 12px; 
-                    color: #475569;
-                    font-weight: 500;
-                    white-space: nowrap;
-                }
-                
-                .status-success { color: #059669; }
-                .status-error { color: #dc2626; }
-                .status-loading { color: #2563eb; }
-                
-                .status-indicator {
-                    width: 8px;
-                    height: 8px;
-                    border-radius: 50%;
-                    background: #94a3b8;
-                    animation: pulse 2s infinite;
-                }
-                
+                .status-text { font-size: 12px; color: #475569; font-weight: 500; }
+                .status-indicator { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; }
                 .status-success .status-indicator { background: #10b981; }
                 .status-error .status-indicator { background: #ef4444; }
-                .status-loading .status-indicator { 
-                    background: #3b82f6;
-                    animation: spin 1s linear infinite;
-                }
-                
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.5; }
-                }
-                
-                @keyframes spin {
-                    0% { transform: rotate(0deg); }
-                    100% { transform: rotate(360deg); }
-                }
-                
-                /* 工作区样式 */
+                .status-loading .status-indicator { background: #3b82f6; animation: spin 1s linear infinite; }
+                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+                /* 工作区与分隔条 */
                 .mermaid-workspace { 
-                    flex: 1; 
-                    display: flex; 
-                    overflow: hidden; 
-                    padding: 12px; 
-                    gap: 12px; 
-                    background: transparent;
+                    flex: 1; display: flex; overflow: hidden; 
+                    padding: 12px; background: transparent;
                 }
                 
-                .mermaid-footer { 
-                    padding: 8px 16px; 
-                    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
-                    border-top: 1px solid #e2e8f0; 
-                    font-size: 11px; 
-                    color: #64748b; 
-                    display: flex; 
-                    justify-content: space-between;
-                    font-weight: 500;
-                }
-                
-                /* 编辑器面板 */
                 .editor-pane, .preview-pane { 
-                    flex: 1; 
-                    background: #ffffff; 
-                    border: 1px solid #e2e8f0; 
-                    border-radius: 8px; 
-                    display: flex; 
-                    flex-direction: column; 
-                    overflow: hidden; 
-                    position: relative;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+                    flex: 1; /* 默认均分，会被 JS 修改 */
+                    background: #ffffff; border: 1px solid #e2e8f0; 
+                    border-radius: 8px; display: flex; flex-direction: column; 
+                    overflow: hidden; position: relative;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+                    min-width: 200px; /* 防止被压得太小 */
                 }
+
+                /* [新增] 分隔条样式 */
+                .layout-resizer {
+                    width: 10px; background: transparent; cursor: col-resize;
+                    transition: background 0.2s; z-index: 10; margin: 0 -5px;
+                    position: relative; flex-shrink: 0;
+                }
+                .layout-resizer::after {
+                    content: ''; position: absolute; left: 4px; top: 10%; bottom: 10%;
+                    width: 2px; background: #e2e8f0; transition: background 0.2s;
+                    border-radius: 2px;
+                }
+                .layout-resizer:hover::after, .layout-resizer.active::after { background: #3b82f6; }
                 
+                /* [新增] 拖动时的全局样式 */
+                body.is-resizing { cursor: col-resize !important; user-select: none; }
+                body.is-resizing iframe { pointer-events: none; }
+
                 .pane-header { 
-                    padding: 8px 12px; 
-                    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-                    border-bottom: 1px solid #e2e8f0; 
-                    font-size: 12px; 
-                    font-weight: 600; 
-                    color: #475569; 
-                    display: flex; 
-                    justify-content: space-between; 
-                    align-items: center;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
+                    padding: 8px 12px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; 
+                    font-size: 12px; font-weight: 600; color: #475569; 
+                    display: flex; justify-content: space-between; align-items: center;
                 }
                 
                 .code-editor { 
-                    flex: 1; 
-                    border: none; 
-                    padding: 12px; 
-                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace; 
-                    font-size: 13px; 
-                    line-height: 1.6; 
-                    resize: none; 
-                    outline: none;
-                    background: #ffffff;
-                    color: #334155;
+                    flex: 1; border: none; padding: 12px; 
+                    font-family: 'Consolas', monospace; font-size: 13px; 
+                    line-height: 1.6; resize: none; outline: none;
                 }
                 
-                .code-editor:focus {
-                    background: #fafafa;
-                }
+                .preview-viewport { flex: 1; overflow: hidden; position: relative; cursor: grab; background: white; }
+                .preview-content { transform-origin: 0 0; padding: 24px; min-height: 100%; box-sizing: border-box; }
+                .mermaid-diagram { width: 100%; height: 100%; }
                 
-                .preview-viewport { 
-                    flex: 1; 
-                    overflow: hidden; 
-                    position: relative; 
-                    cursor: grab; 
-                    background: #ffffff;
-                }
-                
-                .preview-content { 
-                    transform-origin: 0 0; 
-                    padding: 24px; 
-                    min-height: 100%; 
-                    box-sizing: border-box;
-                    background: #ffffff;
-                }
-                
-                .mermaid-diagram { 
-                    width: 100%; 
-                    height: 100%; 
-                }
-                
-                .zoom-tools { 
-                    position: absolute; 
-                    bottom: 12px; 
-                    right: 12px; 
-                    display: flex; 
-                    flex-direction: column; 
-                    gap: 4px; 
-                }
-                
+                .zoom-tools { position: absolute; bottom: 12px; right: 12px; display: flex; flex-direction: column; gap: 4px; }
                 .mini-btn { 
-                    padding: 4px 8px; 
-                    background: rgba(255,255,255,0.95); 
-                    border: 1px solid #cbd5e1; 
-                    border-radius: 4px; 
-                    cursor: pointer; 
-                    font-size: 11px;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                    transition: all 0.2s;
+                    padding: 4px 8px; background: rgba(255,255,255,0.95); 
+                    border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; 
                 }
-                
-                .mini-btn:hover {
-                    background: #f1f5f9;
-                    transform: translateY(-1px);
-                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
-                }
+                .mini-btn:hover { background: #f1f5f9; }
                 
                 .error-box { 
-                    position: absolute; 
-                    bottom: 0; 
-                    left: 0; 
-                    right: 0; 
-                    background: #fef2f2; 
-                    color: #dc2626; 
-                    padding: 10px; 
-                    font-size: 11px; 
-                    border-top: 1px solid #fecaca; 
-                    display: none; 
-                    max-height: 100px; 
-                    overflow-y: auto;
-                    font-family: 'Consolas', monospace;
-                    border-radius: 0 0 8px 8px;
+                    position: absolute; bottom: 0; left: 0; right: 0; 
+                    background: #fef2f2; color: #dc2626; padding: 10px; 
+                    font-size: 11px; border-top: 1px solid #fecaca; display: none; 
+                    max-height: 100px; overflow-y: auto; font-family: monospace;
+                }
+                
+                .mermaid-footer { 
+                    padding: 8px 16px; background: #fafbfc; border-top: 1px solid #e2e8f0; 
+                    font-size: 11px; color: #64748b; display: flex; justify-content: space-between;
                 }
             `;
             const style = document.createElement('style');
