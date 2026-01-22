@@ -4,10 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WinBox Web Desktop v2.0</title>
+    <title>WinBox Web Desktop v2.0 - Tech Edition</title>
     <!-- 引入 WinBox.js -->
     <script src="https://cdn.jsdelivr.net/npm/winbox@0.2.82/dist/winbox.bundle.min.js"></script>
+    <!-- 原始样式 -->
     <link rel="stylesheet" href="styles.css">
+    <!-- 科技风格样式覆盖 -->
+    <link rel="stylesheet" href="tech-styles.css">
     <!-- 引入 Monaco Editor Loader -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
     <script>
@@ -24,12 +27,13 @@
     <style>
         .mermaid-error {
             color: #ff6b6b;
-            background: #fff5f5;
+            background: rgba(255, 95, 95, 0.1);
             padding: 10px;
-            border-radius: 4px;
-            border: 1px solid #ffd6d6;
-            font-family: monospace;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 95, 95, 0.3);
+            font-family: 'Exo 2', monospace;
             white-space: pre-wrap;
+            box-shadow: 0 0 10px rgba(255, 95, 95, 0.2);
         }
     </style>
 </head>
@@ -52,7 +56,12 @@
     <script src="js/apps/serial.js"></script>
     <script src="js/apps/vditor.js"></script>
     <script src="js/apps/mermaid.js"></script>
-
+    <script src="js/apps/csv.js"></script>
+    <script src="js/apps/office.js"></script>
+    
+    <!-- 引入动态背景效果 -->
+    <script src="js/tech-background.js"></script>
+    
     <!-- 
       提示：如果你想动态加载 JS (例如从服务器获取应用列表)，
       可以使用 document.createElement('script') 动态插入。

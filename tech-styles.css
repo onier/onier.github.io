@@ -1,0 +1,585 @@
+:root {
+    --primary-color: #00c3ff;
+    --secondary-color: #0084ff;
+    --accent-color: #5933ff;
+    --bg-overlay: rgba(10, 17, 40, 0.6);
+    --neon-glow: 0 0 8px rgba(0, 195, 255, 0.5);
+    --panel-bg: rgba(16, 22, 47, 0.85);
+    --panel-border: 1px solid rgba(0, 195, 255, 0.2);
+    --glass-effect: blur(10px);
+    --tech-gradient: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: 'Exo 2', 'Segoe UI', sans-serif;
+    background: url('https://images.unsplash.com/photo-1543722530-d2c3201371e7?q=80&w=3874&auto=format&fit=crop') no-repeat center center fixed;
+    background-size: cover;
+    height: 100vh;
+    user-select: none;
+    color: #edf2ff;
+}
+
+/* 添加科技感字体 */
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500&display=swap');
+
+/* --- 桌面图标区域 --- */
+#desktop {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
+    height: 100vh;
+    padding: 10px;
+    align-content: flex-start;
+    gap: 12px;
+}
+
+.desktop-icon {
+    width: 85px;
+    height: 95px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+    color: white;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    background: rgba(16, 22, 47, 0.3);
+    backdrop-filter: var(--glass-effect);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.desktop-icon:hover {
+    background: rgba(0, 195, 255, 0.15);
+    transform: translateY(-3px);
+    box-shadow: var(--neon-glow), 0 7px 20px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(0, 195, 255, 0.3);
+}
+
+.icon-img {
+    font-size: 32px;
+    margin-bottom: 8px;
+    filter: drop-shadow(0 0 5px rgba(0, 195, 255, 0.5));
+}
+
+.icon-text {
+    font-size: 13px;
+    text-align: center;
+    word-break: break-all;
+    line-height: 1.2;
+    font-weight: 300;
+    letter-spacing: 0.5px;
+}
+
+/* WinBox 自定义样式微调 */
+.winbox {
+    background: var(--panel-bg) !important;
+    backdrop-filter: var(--glass-effect);
+    border: var(--panel-border) !important;
+    border-radius: 10px !important;
+    overflow: hidden;
+}
+
+.wb-header {
+    background: linear-gradient(90deg, rgba(16, 22, 47, 0.95), rgba(23, 32, 68, 0.95)) !important;
+    border-bottom: 1px solid rgba(0, 195, 255, 0.2) !important;
+}
+
+.wb-body {
+    background: transparent !important;
+    border-radius: 0 0 10px 10px;
+}
+
+.wb-title {
+    color: var(--primary-color) !important;
+    text-shadow: 0 0 5px rgba(0, 195, 255, 0.4);
+    font-family: 'Exo 2', sans-serif;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+}
+
+.wb-icon {
+    filter: drop-shadow(0 0 3px rgba(0, 195, 255, 0.5));
+}
+
+/* --- 文件管理器样式 --- */
+.fm-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: rgba(16, 22, 47, 0.8);
+    overflow: hidden;
+    color: #edf2ff;
+    border-radius: 0 0 10px 10px;
+}
+
+.fm-toolbar {
+    padding: 10px;
+    background: rgba(23, 32, 68, 0.9);
+    border-bottom: 1px solid rgba(0, 195, 255, 0.2);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.fm-path, .fm-address-bar {
+    flex: 1;
+    background: rgba(10, 15, 35, 0.8);
+    border: 1px solid rgba(0, 195, 255, 0.3);
+    padding: 6px 10px;
+    font-size: 13px;
+    color: #edf2ff;
+    border-radius: 6px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.fm-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    height: 0;
+}
+
+.fm-sidebar, .fm-tree-panel {
+    width: 200px;
+    background: rgba(16, 22, 47, 0.7);
+    border-right: 1px solid rgba(0, 195, 255, 0.2);
+    padding: 10px;
+    font-size: 13px;
+}
+
+.fm-details-panel {
+    padding: 10px;
+    background: rgba(10, 15, 35, 0.8);
+    border: 1px solid rgba(0, 195, 255, 0.2);
+    margin-top: 10px;
+    border-radius: 6px;
+    display: none;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+}
+
+.fm-content {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
+    grid-auto-rows: 105px;
+    gap: 12px;
+    align-content: start;
+    background: rgba(10, 15, 35, 0.6);
+}
+
+.fm-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.3s;
+    background: rgba(16, 22, 47, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.fm-item:hover {
+    background: rgba(0, 195, 255, 0.15);
+    border: 1px solid rgba(0, 195, 255, 0.3);
+    box-shadow: 0 0 15px rgba(0, 195, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.fm-item-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+    color: var(--primary-color);
+    filter: drop-shadow(0 0 5px rgba(0, 195, 255, 0.5));
+}
+
+.fm-item-name {
+    font-size: 12px;
+    word-break: break-all;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: #edf2ff;
+}
+
+/* 树节点样式 */
+.tree-node {
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.tree-row {
+    display: flex;
+    align-items: center;
+    padding: 4px 5px;
+    transition: all 0.2s;
+    border-radius: 4px;
+    margin: 2px 0;
+}
+
+.tree-row:hover {
+    background: rgba(0, 195, 255, 0.15);
+}
+
+.tree-row.selected {
+    background: rgba(0, 195, 255, 0.3);
+    border: 1px solid rgba(0, 195, 255, 0.5);
+    padding: 3px 4px;
+    box-shadow: 0 0 8px rgba(0, 195, 255, 0.2);
+}
+
+.tree-indent {
+    display: inline-block;
+    width: 16px;
+}
+
+.tree-arrow {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-color);
+    font-size: 10px;
+    margin-right: 2px;
+    transition: transform 0.2s;
+}
+
+.tree-arrow:hover {
+    color: #ffffff;
+}
+
+.tree-arrow.expanded {
+    transform: rotate(90deg);
+}
+
+.tree-icon {
+    margin-right: 5px;
+    color: var(--primary-color);
+}
+
+/* 右侧：详细信息列表 */
+.fm-list-panel, .fm-right-panel {
+    flex: 1;
+    overflow: auto;
+    background: rgba(10, 15, 35, 0.6);
+}
+
+/* 表格样式 */
+.fm-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.fm-table th {
+    background: rgba(23, 32, 68, 0.9);
+    border-right: 1px solid rgba(0, 195, 255, 0.2);
+    border-bottom: 1px solid rgba(0, 195, 255, 0.3);
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 400;
+    color: var(--primary-color);
+    position: sticky;
+    top: 0;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+}
+
+.fm-table th:hover {
+    background: rgba(0, 195, 255, 0.15);
+}
+
+.fm-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+    color: #edf2ff;
+}
+
+.fm-table tr:hover {
+    background: rgba(0, 195, 255, 0.1);
+}
+
+.fm-table tr.selected {
+    background: rgba(0, 195, 255, 0.2);
+}
+
+/* --- Monica Editor (Monaco 版) --- */
+.editor-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: rgba(10, 15, 35, 0.9);
+    overflow: hidden;
+}
+
+.editor-toolbar {
+    height: 40px;
+    padding: 0 15px;
+    background: rgba(23, 32, 68, 0.9);
+    border-bottom: 1px solid rgba(0, 195, 255, 0.2);
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.editor-btn {
+    background: rgba(0, 195, 255, 0.1);
+    border: 1px solid rgba(0, 195, 255, 0.3);
+    color: var(--primary-color);
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+    font-family: 'Exo 2', sans-serif;
+    letter-spacing: 0.5px;
+}
+
+.editor-btn:hover {
+    background: rgba(0, 195, 255, 0.2);
+    color: #fff;
+    box-shadow: 0 0 10px rgba(0, 195, 255, 0.3);
+    transform: translateY(-1px);
+}
+
+/* Monaco 容器 */
+.monaco-container {
+    flex: 1;
+    width: 100%;
+    position: relative;
+    background: rgba(10, 15, 35, 0.8);
+}
+
+.editor-status {
+    height: 28px;
+    padding: 0 15px;
+    background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+    color: white;
+    font-size: 13px;
+    line-height: 28px;
+    display: flex;
+    justify-content: space-between;
+    flex-shrink: 0;
+    font-weight: 300;
+    letter-spacing: 0.5px;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* --- 资源管理器多标签页样式 --- */
+
+/* 标签栏容器 */
+.fm-tabs-bar {
+    height: 40px;
+    background: rgba(23, 32, 68, 0.9);
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    border-bottom: 1px solid rgba(0, 195, 255, 0.2);
+    flex-shrink: 0;
+}
+
+/* 单个标签 */
+.fm-tab {
+    display: flex;
+    align-items: center;
+    padding: 0 15px;
+    height: 100%;
+    color: #8c9eff;
+    background: rgba(16, 22, 47, 0.8);
+    border-right: 1px solid rgba(0, 195, 255, 0.1);
+    cursor: pointer;
+    font-size: 13px;
+    min-width: 130px;
+    max-width: 200px;
+    user-select: none;
+    transition: all 0.3s;
+}
+
+.fm-tab:hover {
+    background: rgba(0, 195, 255, 0.15);
+    color: #fff;
+}
+
+.fm-tab.active {
+    background: rgba(10, 15, 35, 0.9);
+    color: var(--primary-color);
+    border-top: 2px solid var(--primary-color);
+    box-shadow: 0 0 10px rgba(0, 195, 255, 0.2);
+}
+
+.fm-tab-icon {
+    margin-right: 8px;
+    color: var(--primary-color);
+    filter: drop-shadow(0 0 3px rgba(0, 195, 255, 0.3));
+}
+
+.fm-tab-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.5px;
+}
+
+.fm-tab-close {
+    margin-left: 10px;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.fm-tab-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+/* 视图容器 */
+.fm-views-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 单个视图 */
+.fm-view {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    display: none;
+    overflow: hidden;
+    background: rgba(10, 15, 35, 0.8);
+}
+
+.fm-view.active {
+    display: block;
+}
+
+/* 终端面板 */
+.fm-term-panel {
+    height: 170px;
+    border-top: 1px solid rgba(0, 195, 255, 0.2);
+    background: rgba(7, 11, 25, 0.95);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(10, 15, 35, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 195, 255, 0.3);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 195, 255, 0.5);
+}
+
+/* 按钮样式通用化 */
+button {
+    background: rgba(0, 195, 255, 0.1);
+    border: 1px solid rgba(0, 195, 255, 0.3);
+    color: var(--primary-color);
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+    font-family: 'Exo 2', sans-serif;
+}
+
+button:hover {
+    background: rgba(0, 195, 255, 0.2);
+    color: #fff;
+    box-shadow: 0 0 10px rgba(0, 195, 255, 0.3);
+}
+
+/* 表单元素 */
+input, select, textarea {
+    background: rgba(10, 15, 35, 0.8);
+    border: 1px solid rgba(0, 195, 255, 0.3);
+    color: #edf2ff;
+    padding: 6px 10px;
+    font-size: 13px;
+    border-radius: 6px;
+    transition: all 0.2s;
+    font-family: 'Exo 2', sans-serif;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 8px rgba(0, 195, 255, 0.4), inset 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* 特效元素 - 霓虹边框 */
+.neon-border {
+    position: relative;
+}
+
+.neon-border::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: inherit;
+    border: 1px solid var(--primary-color);
+    box-shadow: 0 0 10px rgba(0, 195, 255, 0.5);
+    pointer-events: none;
+}
+
+/* 特效元素 - 科技线条背景 */
+.tech-lines-bg {
+    position: relative;
+    overflow: hidden;
+}
+
+.tech-lines-bg::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        linear-gradient(90deg, rgba(0, 195, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(rgba(0, 195, 255, 0.03) 1px, transparent 1px);
+    background-size: 20px 20px;
+    pointer-events: none;
+    z-index: -1;
+}
