@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <div id="test"></div>
+    <script>
+        console.log('Testing Mermaid library...');
+        console.log('typeof mermaid:', typeof mermaid);
+        if (typeof mermaid !== 'undefined') {
+            console.log('Mermaid library loaded successfully!');
+            document.getElementById('test').innerHTML = '<div style="color: green;">Mermaid库加载成功！</div>';
+        } else {
+            console.log('Mermaid library NOT loaded!');
+            document.getElementById('test').innerHTML = '<div style="color: red;">Mermaid库加载失败！</div>';
+        }
+    </script>
+</body>
+</html>

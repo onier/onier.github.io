@@ -18,6 +18,20 @@
     <!-- 引入 Vditor Markdown 编辑器 -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vditor@3.10.5/dist/index.css" />
     <script src="https://cdn.jsdelivr.net/npm/vditor@3.10.5/dist/index.min.js"></script>
+    
+    <!-- 引入 Mermaid 图表库 -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script> -->
+    <style>
+        .mermaid-error {
+            color: #ff6b6b;
+            background: #fff5f5;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ffd6d6;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
 </head>
 
 <body>
@@ -37,6 +51,7 @@
     <script src="js/apps/calculator.js"></script>
     <script src="js/apps/serial.js"></script>
     <script src="js/apps/vditor.js"></script>
+    <script src="js/apps/mermaid.js"></script>
 
     <!-- 
       提示：如果你想动态加载 JS (例如从服务器获取应用列表)，
