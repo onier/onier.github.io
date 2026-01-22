@@ -733,7 +733,7 @@
     if (typeof DesktopSystem !== 'undefined') {
         DesktopSystem.registerApp({
             id: 'mermaid-editor',
-            title: 'Mermaid Editor Pro',
+            title: 'Mermaid UML编辑器',
             icon: '📊',
             width: 1000,
             height: 700,

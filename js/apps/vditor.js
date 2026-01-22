@@ -340,7 +340,7 @@ class VditorEditor {
 // 注册应用
 DesktopSystem.registerApp({
     id: 'vditor',
-    title: 'Markdown Pro',
+    title: 'Markdown编辑器',
     icon: '📝',
     width: 960,
     height: 700,

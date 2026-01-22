@@ -189,7 +189,7 @@ window.MonicaEditorApp = {
         const instanceId = `monaco_${Date.now()}`;
 
         new WinBox({
-            title: fileHandle ? `Monaco Editor - ${fileHandle.name}` : 'Monaco Editor',
+            title: fileHandle ? `文本编辑器 - ${fileHandle.name}` : '文本编辑器',
             icon: false,
             background: '#252526',
             border: 4,
@@ -214,7 +214,7 @@ window.MonicaEditorApp = {
 // 注册到桌面
 DesktopSystem.registerApp({
     id: 'monica-editor',
-    title: 'Monaco Editor',
+    title: '文本编辑器',
     icon: '📝',
     type: 'html',
     content: () => {
