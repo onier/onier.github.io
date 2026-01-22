@@ -117,15 +117,6 @@ class VditorEditor {
                             <div class="vd-divider"></div>
                             <button class="vd-btn icon-only" id="export-${id}" title="导出 HTML">${ICONS.export}</button>
                         </div>
-
-                        <div class="vd-controls">
-                            <select id="mode-${id}" class="vd-select">
-                                <option value="sv">分屏预览</option>
-                                <option value="ir">即时渲染</option>
-                                <option value="wysiwyg">所见即所得</option>
-                            </select>
-                            <button class="vd-btn icon-only" id="help-${id}" title="帮助">${ICONS.help}</button>
-                        </div>
                     </div>
                 </div>
 
