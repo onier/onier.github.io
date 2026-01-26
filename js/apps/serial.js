@@ -39,95 +39,93 @@ class SerialConsole {
     initUI() {
         this.container.innerHTML = `
             <div class="serial-console">
-                <div class="serial-header">
-                    <h3>串口控制台</h3>
-                    <div class="connection-status">
-                        <span class="status-indicator" data-id="statusIndicator">●</span>
-                        <span data-id="statusText">未连接</span>
-                    </div>
-                </div>
-                
                 <div class="serial-controls">
-                    <div class="config-section">
-                        <h4>串口配置</h4>
-                        <div class="config-grid">
-                            <div class="config-item">
-                                <label>端口:</label>
-                                <select data-id="portSelect">
-                                    <option value="">请先选择设备...</option>
-                                </select>
-                            </div>
-                            <div class="config-item">
-                                <label>波特率:</label>
-                                <select data-id="baudRate">
-                                    <option value="1200">1200</option>
-                                    <option value="2400">2400</option>
-                                    <option value="4800">4800</option>
-                                    <option value="9600" selected>9600</option>
-                                    <option value="19200">19200</option>
-                                    <option value="38400">38400</option>
-                                    <option value="57600">57600</option>
-                                    <option value="115200">115200</option>
-                                    <option value="230400">230400</option>
-                                    <option value="921600">921600</option>
-                                </select>
-                            </div>
-                            <div class="config-item">
-                                <label>数据位:</label>
-                                <select data-id="dataBits">
-                                    <option value="7">7</option>
-                                    <option value="8" selected>8</option>
-                                </select>
-                            </div>
-                            <div class="config-item">
-                                <label>停止位:</label>
-                                <select data-id="stopBits">
-                                    <option value="1" selected>1</option>
-                                    <option value="2">2</option>
-                                </select>
-                            </div>
-                            <div class="config-item">
-                                <label>校验位:</label>
-                                <select data-id="parity">
-                                    <option value="none" selected>无</option>
-                                    <option value="even">偶校验</option>
-                                    <option value="odd">奇校验</option>
-                                </select>
-                            </div>
+                    <div class="config-row">
+                        <div class="config-item">
+                            <label>端口</label>
+                            <select data-id="portSelect">
+                                <option value="">选择设备...</option>
+                            </select>
                         </div>
-                    </div>
-                    
-                    <div class="connection-section">
-                        <button data-id="requestPortBtn" class="btn primary-outline" title="授权新设备">➕ 选择设备</button>
-                        <button data-id="refreshPorts" class="btn secondary" title="刷新已授权设备列表">刷新</button>
-                        <div class="divider-vertical"></div>
-                        <button data-id="connectBtn" class="btn primary">连接</button>
-                        <button data-id="disconnectBtn" class="btn danger" disabled>断开</button>
-                        <button data-id="clearBtn" class="btn secondary">清空窗口</button>
+                        <div class="config-item">
+                            <label>波特率</label>
+                            <select data-id="baudRate">
+                                <option value="1200">1200</option>
+                                <option value="2400">2400</option>
+                                <option value="4800">4800</option>
+                                <option value="9600" selected>9600</option>
+                                <option value="19200">19200</option>
+                                <option value="38400">38400</option>
+                                <option value="57600">57600</option>
+                                <option value="115200">115200</option>
+                                <option value="230400">230400</option>
+                                <option value="921600">921600</option>
+                            </select>
+                        </div>
+                        <div class="config-item">
+                            <label>数据位</label>
+                            <select data-id="dataBits">
+                                <option value="7">7</option>
+                                <option value="8" selected>8</option>
+                            </select>
+                        </div>
+                        <div class="config-item">
+                            <label>停止位</label>
+                            <select data-id="stopBits">
+                                <option value="1" selected>1</option>
+                                <option value="2">2</option>
+                            </select>
+                        </div>
+                        <div class="config-item">
+                            <label>校验位</label>
+                            <select data-id="parity">
+                                <option value="none" selected>无</option>
+                                <option value="even">偶</option>
+                                <option value="odd">奇</option>
+                            </select>
+                        </div>
+                        <div class="config-item">
+                            <button data-id="requestPortBtn" class="btn primary-outline" title="授权新设备">➕ 选择设备</button>
+                        </div>
+                        <div class="config-item">
+                            <button data-id="refreshPorts" class="btn secondary" title="刷新已授权设备列表">刷新</button>
+                        </div>
+                        <div class="config-item">
+                            <button data-id="connectBtn" class="btn primary">连接</button>
+                        </div>
+                        <div class="config-item">
+                            <button data-id="disconnectBtn" class="btn danger" disabled>断开</button>
+                        </div>
+                        <div class="config-item">
+                            <button data-id="clearBtn" class="btn secondary">清空窗口</button>
+                        </div>
                     </div>
                 </div>
                 
                 <div class="serial-main">
                     <div class="receive-section">
-                        <h4>接收区 <span class="subtitle">(来自设备)</span></h4>
-                        <div class="receive-options">
-                            <label><input type="checkbox" data-id="autoScroll" checked> 自动滚动</label>
-                            <label><input type="checkbox" data-id="showTimestamp"> 时间戳</label>
-                            <label><input type="checkbox" data-id="hexDisplay"> HEX显示</label>
+                        <div class="receive-header">
+                            <h4>接收区 <span class="subtitle">(来自设备)</span></h4>
+                            <div class="receive-options">
+                                <label><input type="checkbox" data-id="autoScroll" checked> 自动滚动</label>
+                                <label><input type="checkbox" data-id="showTimestamp"> 时间戳</label>
+                                <label><input type="checkbox" data-id="hexDisplay"> HEX显示</label>
+                                <span class="receive-info">
+                                    RX: <span data-id="byteCount">0</span> Bytes | Lines: <span data-id="lineCount">0</span>
+                                </span>
+                            </div>
                         </div>
                         <textarea data-id="receiveArea" readonly placeholder="等待数据..."></textarea>
-                        <div class="receive-info">
-                            <span>RX: <span data-id="byteCount">0</span> Bytes</span>
-                            <span>Lines: <span data-id="lineCount">0</span></span>
-                        </div>
                     </div>
                     
                     <div class="send-section">
-                        <h4>发送区 <span class="subtitle">(发送到设备)</span></h4>
-                        <div class="send-options">
-                            <label><input type="checkbox" data-id="appendNewline"> 加换行(CRLF)</label>
-                            <label><input type="checkbox" data-id="hexSend"> HEX发送</label>
-                            <button data-id="sendBtn" class="btn primary" disabled>发送</button>
+                        <div class="send-header">
+                            <h4>发送区 <span class="subtitle">(发送到设备)</span></h4>
+                            <div class="send-options">
+                                <label><input type="checkbox" data-id="appendNewline"> 加换行(CRLF)</label>
+                                <label><input type="checkbox" data-id="hexSend"> HEX发送</label>
+                                <button data-id="sendBtn" class="btn primary" disabled>发送</button>
+                            </div>
                         </div>
                         <textarea data-id="sendArea" placeholder="输入数据..."></textarea>
                         <div class="send-controls">
@@ -501,38 +499,35 @@ if (!document.getElementById('serial-console-style')) {
     style.id = 'serial-console-style';
     style.textContent = `
     .serial-console { display: flex; flex-direction: column; height: 100%; padding: 10px; box-sizing: border-box; background: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    .serial-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid #ddd; margin-bottom: 10px; }
-    .serial-header h3 { margin: 0; color: #333; font-size: 16px; }
     .connection-status { font-size: 13px; font-weight: 500; }
     
-    .serial-controls { background: #fff; padding: 12px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 10px; }
-    .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 12px; }
-    .config-item { display: flex; flex-direction: column; gap: 4px; }
-    .config-item label { font-size: 11px; color: #666; font-weight: 500; }
-    .config-item select { padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; }
+    .serial-controls { background: #fff; padding: 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 8px; }
+    .config-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .config-item { display: flex; flex-direction: column; gap: 2px; }
+    .config-item label { font-size: 10px; color: #666; font-weight: 500; text-align: center; }
+    .config-item select { padding: 3px 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px; min-width: 60px; }
+    .config-item .btn { padding: 4px 8px; font-size: 11px; white-space: nowrap; }
     
-    .connection-section { display: flex; gap: 8px; align-items: center; }
-    .divider-vertical { width: 1px; height: 24px; background: #ddd; margin: 0 4px; }
-    
-    .serial-main { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-    .receive-section, .send-section { display: flex; flex-direction: column; background: #fff; padding: 10px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .receive-section { flex: 2; min-height: 0; }
+    .serial-main { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+    .receive-section, .send-section { display: flex; flex-direction: column; background: #fff; padding: 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .receive-section { flex: 3; min-height: 0; }
     .send-section { flex: 1; min-height: 0; }
     
-    h4 { margin: 0 0 8px 0; font-size: 13px; color: #444; display: flex; justify-content: space-between; align-items: center; }
-    .subtitle { font-weight: normal; color: #999; font-size: 11px; }
+    .receive-header, .send-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    h4 { margin: 0; font-size: 13px; color: #444; display: flex; align-items: center; }
+    .subtitle { font-weight: normal; color: #999; font-size: 11px; margin-left: 6px; }
     
-    .receive-options, .send-options { display: flex; gap: 12px; margin-bottom: 8px; font-size: 12px; color: #555; }
+    .receive-options, .send-options { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #555; }
     .receive-options label, .send-options label { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+    .receive-info { font-size: 11px; color: #888; margin-left: auto; padding-left: 12px; }
     
     textarea { flex: 1; resize: none; border: 1px solid #ddd; border-radius: 4px; padding: 8px; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.4; outline: none; }
     textarea:focus { border-color: #2196F3; }
     .receive-section textarea { background-color: #fafafa; color: #222; }
     
-    .receive-info { display: flex; justify-content: space-between; margin-top: 5px; font-size: 11px; color: #888; }
     .send-controls { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
     
-    .log-section { height: 80px; margin-top: 10px; background: #fff; padding: 8px; border-radius: 6px; display: flex; flex-direction: column; }
+    .log-section { height: 50px; margin-top: 8px; background: #fff; padding: 6px; border-radius: 6px; display: flex; flex-direction: column; }
     .log-area { flex: 1; overflow-y: auto; font-family: monospace; font-size: 11px; border: 1px solid #eee; padding: 4px; background: #fcfcfc; }
     .log-entry { padding: 1px 0; border-bottom: 1px dashed #f0f0f0; }
     .log-entry .time { color: #999; margin-right: 6px; }
