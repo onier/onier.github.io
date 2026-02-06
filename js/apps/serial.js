@@ -161,7 +161,7 @@ class SerialConsole {
                         <!-- 状态与缓存设置 -->
                         <div class="config-item" style="margin-left:auto; border-left:1px solid #eee; padding-left:8px;">
                             <label>最大行数</label>
-                            <input type="number" data-id="maxLines" value="1000" min="100" step="100" style="width: 60px;">
+                            <input type="number" data-id="maxLines" value="10000" min="100" step="100" style="width: 60px;">
                         </div>
                         <div class="config-item" style="display: flex; align-items: center; gap: 5px; padding-right: 5px;">
                             <span data-id="statusIndicator" style="color: #F44336; font-size: 14px;">●</span>
