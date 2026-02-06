@@ -3,8 +3,9 @@
  * 串口控制台应用 - 使用 Web Serial API 与串口设备通信
  * 修复版：支持设备请求、二进制Hex显示、流式中文解码
  * 修改版：增加时间戳(HH:MM:SS/ms)、日志导入导出、默认开启时间戳
- * 增强版：使用 Monaco Editor 显示日志，支持 Delta Time 高亮
+ * 增强版：使用 Monaco Editor 显示日志
  * 优化版：增加缓存行数限制，修复空行过多问题
+ * 进阶版：使用 Monaco 装饰器显示虚拟时间差，导入文件时自动重算时间差
  */
 
 class SerialConsole {
@@ -21,12 +22,13 @@ class SerialConsole {
         this.editor = null;
         this.monacoModel = null;
         this.editorDecorations = []; // 存储当前的装饰器ID
-        this.pendingData = []; // Monaco加载完成前的数据缓冲
+        this.pendingData = []; 
         this.isMonacoReady = false;
 
         // 状态变量
         this.lastMsgEndsWithNewline = true; 
         this.lastParsedTime = null; 
+        this.sessionStartTime = null; 
         this.receiveBuffer = ''; 
         
         // 默认串口配置
@@ -36,12 +38,11 @@ class SerialConsole {
             stopBits: 1,
             parity: 'none',
             flowControl: 'none',
-            maxLines: 10000 // 默认最大行数
+            maxLines: 1000 
         };
         
         this.initUI();
         
-        // 异步加载 Monaco
         this.loadMonaco().then(() => {
             this.initMonaco();
         }).catch(err => {
@@ -61,7 +62,6 @@ class SerialConsole {
         });
     }
     
-    // 动态加载 Monaco Editor Loader
     loadMonaco() {
         return new Promise((resolve, reject) => {
             if (window.monaco) {
@@ -83,9 +83,8 @@ class SerialConsole {
 
     initMonaco() {
         const container = this.elements.receiveContainer;
-        container.innerHTML = ''; // 清空占位符
+        container.innerHTML = ''; 
 
-        // 创建自定义主题
         monaco.editor.defineTheme('serialLogTheme', {
             base: 'vs',
             inherit: true,
@@ -100,7 +99,7 @@ class SerialConsole {
             value: '',
             language: 'plaintext',
             theme: 'serialLogTheme',
-            readOnly: true, // 只读
+            readOnly: true, 
             automaticLayout: true,
             scrollBeyondLastLine: false,
             wordWrap: 'on',
@@ -111,13 +110,13 @@ class SerialConsole {
             fontFamily: 'Consolas, "Courier New", monospace',
             fontSize: 12,
             contextmenu: true,
-            mouseWheelZoom: true
+            mouseWheelZoom: true,
+            renderWhitespace: 'none'
         });
 
         this.monacoModel = this.editor.getModel();
         this.isMonacoReady = true;
 
-        // 处理缓冲的数据
         if (this.pendingData.length > 0) {
             this.pendingData.forEach(item => this.writeToMonaco(item));
             this.pendingData = [];
@@ -158,10 +157,9 @@ class SerialConsole {
                         <div class="config-item"><button data-id="disconnectBtn" class="btn danger" disabled>断开</button></div>
                         <div class="config-item"><button data-id="clearBtn" class="btn secondary">清空</button></div>
                         
-                        <!-- 状态与缓存设置 -->
                         <div class="config-item" style="margin-left:auto; border-left:1px solid #eee; padding-left:8px;">
                             <label>最大行数</label>
-                            <input type="number" data-id="maxLines" value="10000" min="100" step="100" style="width: 60px;">
+                            <input type="number" data-id="maxLines" value="1000" min="100" step="100" style="width: 60px;">
                         </div>
                         <div class="config-item" style="display: flex; align-items: center; gap: 5px; padding-right: 5px;">
                             <span data-id="statusIndicator" style="color: #F44336; font-size: 14px;">●</span>
@@ -178,13 +176,12 @@ class SerialConsole {
                                 <label><input type="checkbox" data-id="autoScroll" checked> 自动滚动</label>
                                 <label><input type="checkbox" data-id="showTimestamp" checked> 时间戳</label>
                                 <label><input type="checkbox" data-id="hexDisplay"> HEX显示</label>
-                                <button data-id="exportBtn" class="btn secondary" style="padding: 2px 6px; font-size: 11px;" title="保存接收内容(不含时间差)">导出</button>
+                                <button data-id="exportBtn" class="btn secondary" style="padding: 2px 6px; font-size: 11px;" title="保存纯净日志">导出</button>
                                 <button data-id="importBtn" class="btn secondary" style="padding: 2px 6px; font-size: 11px;" title="加载本地文件并分析时间差">导入</button>
                                 <input type="file" data-id="fileInput" accept=".txt,.log" style="display:none">
                                 <span class="receive-info">RX: <span data-id="byteCount">0</span> Bytes</span>
                             </div>
                         </div>
-                        <!-- Monaco Container -->
                         <div data-id="receiveContainer" class="receive-window">正在加载编辑器组件...</div>
                     </div>
                     
@@ -242,12 +239,11 @@ class SerialConsole {
         });
         this.elements.parity.addEventListener('change', (e) => this.config.parity = e.target.value);
         
-        // 监听最大行数变化
         this.elements.maxLines.addEventListener('change', (e) => {
             const val = parseInt(e.target.value);
             if (val > 0) {
                 this.config.maxLines = val;
-                this.checkBufferLimit(true); // 立即应用
+                this.checkBufferLimit(true); 
             }
         });
         
@@ -269,7 +265,6 @@ class SerialConsole {
             chunk = this.textDecoder.decode(dataView, { stream: true });
         }
         
-        // 修复：移除 \r，防止 \r\n 造成双重换行（Monaco 会自动处理换行，不需要 \r）
         chunk = chunk.replace(/\r/g, '');
 
         const currentBytes = parseInt(this.elements.byteCount.textContent) || 0;
@@ -280,7 +275,6 @@ class SerialConsole {
         const timeStr = `[${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}/${now.getMilliseconds().toString().padStart(3,'0')}] `;
         
         if (showTime) {
-            // 逻辑优化：只有当上一段明确以换行符结尾时，才在开头加时间戳
             if (this.lastMsgEndsWithNewline) {
                 processedChunk += timeStr;
                 this.lastMsgEndsWithNewline = false;
@@ -288,13 +282,7 @@ class SerialConsole {
             
             if (chunk.includes('\n')) {
                 const parts = chunk.split('\n');
-                // parts = ["Line1", "Line2", ""] 如果 chunk 以 \n 结尾
-                
                 for (let i = 0; i < parts.length - 1; i++) {
-                    // 在每个换行符后插入时间戳
-                    // 注意：parts[i] 是前一行内容，parts[i+1] 是新行内容
-                    // 我们需要在 parts[i] 后面加 \n + timeStr + parts[i+1]
-                    // 简单做法：直接修改 parts[i+1]
                     parts[i+1] = timeStr + parts[i+1];
                 }
                 processedChunk += parts.join('\n');
@@ -302,16 +290,10 @@ class SerialConsole {
                 processedChunk += chunk;
             }
             
-            // 更新状态：如果 chunk 以 \n 结尾，下次开头需要加时间戳
             if (chunk.endsWith('\n')) {
                 this.lastMsgEndsWithNewline = true;
-                // 移除末尾多余的时间戳（因为 split 逻辑可能会在最后一个空字符串前加时间戳）
-                // 如果 split 结果最后一个是空串且被加了 timeStr，说明我们在行尾加了时间戳但还没内容
-                // 这会导致显示一行只有时间戳的空行。
-                // 修正：如果 processedChunk 结尾是 `\n[Time] `，去掉 `[Time] `，保留 `\n`，留给下次加
                 if (processedChunk.endsWith('\n' + timeStr)) {
                     processedChunk = processedChunk.slice(0, -timeStr.length);
-                    // 此时 lastMsgEndsWithNewline = true，下次进来会加
                 }
             }
         } else {
@@ -326,7 +308,7 @@ class SerialConsole {
         while(tempText.length > 0) {
             const nlIdx = tempText.indexOf('\n');
             if (nlIdx === -1) {
-                this.writeToMonaco(tempText); // 追加模式
+                this.writeToMonaco(tempText); 
                 break;
             } else {
                 const linePart = tempText.slice(0, nlIdx + 1);
@@ -343,7 +325,6 @@ class SerialConsole {
         }
         const model = this.monacoModel;
         
-        // 1. 写入文本
         const lastLine = model.getLineCount();
         const lastLen = model.getLineLength(lastLine);
         
@@ -352,16 +333,13 @@ class SerialConsole {
             text: text
         }]);
         
-        // 2. 检查并添加 Delta
         const currentLastLine = model.getLineCount();
         this.checkAndAddDelta(currentLastLine);
         
-        // 如果 text 里有换行，可能上一行也刚完成，需要检查
         if (text.includes('\n')) {
             this.checkAndAddDelta(currentLastLine - 1);
         }
         
-        // 3. 检查行数限制 (缓存清理)
         this.checkBufferLimit();
 
         if (this.elements.autoScroll.checked) {
@@ -369,34 +347,19 @@ class SerialConsole {
         }
     }
 
-    // 缓存行数限制逻辑
     checkBufferLimit(force = false) {
         if (!this.monacoModel) return;
         
         const maxLines = this.config.maxLines;
         const currentLines = this.monacoModel.getLineCount();
-        
-        // 只有当超出限制一定数量（例如10%）时才触发删除，避免频繁操作 DOM
-        // 或者如果是强制执行（用户修改了设置）
         const threshold = force ? 0 : Math.max(10, maxLines * 0.1);
         
         if (currentLines > maxLines + threshold) {
             const linesToDelete = currentLines - maxLines;
-            
-            // 删除从第1行开始的 linesToDelete 行
-            // Range(startLine, startCol, endLine, endCol)
-            // 要删除 N 行，结束位置应该是第 N+1 行的开头 (或者第 N 行的末尾 + 换行符)
-            // 简单做法：Range(1, 1, linesToDelete + 1, 1) 会选中前 N 行整行
-            
             this.monacoModel.applyEdits([{
                 range: new monaco.Range(1, 1, linesToDelete + 1, 1),
                 text: null
             }]);
-            
-            // 注意：删除行后，editorDecorations 中的 range 会自动调整，
-            // 但已经被删除的行的 decoration 应该会被 Monaco 自动清理。
-            // 我们不需要手动清理 editorDecorations 数组，除非我们想保持它很小。
-            // 实际上 Monaco 返回的 decoration ID 是字符串，我们只管存。
         }
     }
     
@@ -405,51 +368,67 @@ class SerialConsole {
         const model = this.monacoModel;
         const lineContent = model.getLineContent(lineNumber);
         
-        // 如果已经有 Delta 前缀（以 + 开头或空格开头且后面跟 [Time]），跳过
-        if (/^(\+\d+(\.\d+)?(m?s)| {7})\s*\[/.test(lineContent)) return;
-        
-        // 检查是否以 [Time] 开头
+        if (!lineContent.trim().startsWith('[')) return;
+
+        const lineDecos = this.editor.getLineDecorations(lineNumber);
+        const hasTimeDeco = lineDecos.some(d => 
+            d.options.beforeContentClassName && d.options.beforeContentClassName.includes('delta-')
+        );
+        if (hasTimeDeco) return;
+
         const timeMatch = lineContent.match(/^\[(\d{2}):(\d{2}):(\d{2})\/(\d{3})\]/);
         if (timeMatch) {
-            // 这是一个新行，且还没有 Delta
             const now = new Date();
             now.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]), parseInt(timeMatch[3]), parseInt(timeMatch[4]));
             const currentTime = now.getTime();
             
-            let prefix = '       '; // 默认占位
-            let decorationClass = null;
+            if (this.sessionStartTime === null) {
+                this.sessionStartTime = currentTime;
+            }
+
+            let startStr = 'T+0.000s'; 
+            let deltaStr = '+0ms';
+            let decorationClass = 'delta-normal';
             
+            // 1. Total Time
+            if (this.sessionStartTime !== null) {
+                const diffStart = currentTime - this.sessionStartTime;
+                if (diffStart >= 0) {
+                    startStr = `T+${(diffStart/1000).toFixed(3)}s`;
+                }
+            }
+
+            // 2. Delta Time
             if (this.lastParsedTime !== null) {
                 const diff = currentTime - this.lastParsedTime;
-                // 简单的防抖：如果时间倒流（跨天或乱序），重置
                 if (diff >= 0 && diff < 3600000) { 
-                    if (diff >= 1000) prefix = `+${(diff/1000).toFixed(2)}s `;
-                    else prefix = `+${diff}ms `.padEnd(7, ' ');
+                    if (diff >= 1000) deltaStr = `+${(diff/1000).toFixed(2)}s`;
+                    else deltaStr = `+${diff}ms`;
                     
                     if (diff >= 2000) decorationClass = 'delta-2000';
                     else if (diff >= 1000) decorationClass = 'delta-1000';
                     else if (diff >= 300) decorationClass = 'delta-300';
                     else if (diff >= 100) decorationClass = 'delta-100';
-                    else decorationClass = 'delta-normal';
                 }
             }
+            
             this.lastParsedTime = currentTime;
             
-            // 插入 Prefix
-            model.applyEdits([{
+            const displayContent = `${startStr.padEnd(10, ' ')} | ${deltaStr.padEnd(7, ' ')}   `;
+
+            const newDeco = {
                 range: new monaco.Range(lineNumber, 1, lineNumber, 1),
-                text: prefix
-            }]);
-            
-            // 添加颜色
-            if (decorationClass) {
-                const newDeco = {
-                    range: new monaco.Range(lineNumber, 1, lineNumber, prefix.length + 1),
-                    options: { inlineClassName: decorationClass }
-                };
-                const addedIds = model.deltaDecorations([], [newDeco]);
-                this.editorDecorations.push(...addedIds);
-            }
+                options: {
+                    isWholeLine: true,
+                    before: {
+                        content: displayContent,
+                        inlineClassName: `delta-base ${decorationClass}`
+                    }
+                }
+            };
+
+            const addedIds = model.deltaDecorations([], [newDeco]);
+            this.editorDecorations.push(...addedIds);
         }
     }
 
@@ -457,16 +436,7 @@ class SerialConsole {
 
     exportLog() {
         if (!this.monacoModel) return;
-        const lineCount = this.monacoModel.getLineCount();
-        let content = '';
-        
-        // 遍历每一行，去除 Delta 前缀
-        for (let i = 1; i <= lineCount; i++) {
-            let line = this.monacoModel.getLineContent(i);
-            // 去除开头的 Delta (+xxxms 或 空格)
-            line = line.replace(/^[\s\+\d\.ms]+(?=\[)/, '');
-            content += line + (i < lineCount ? '\n' : ''); // 保持换行
-        }
+        const content = this.monacoModel.getValue();
         
         if (!content) { this.log('没有可导出的内容', 'warning'); return; }
         
@@ -493,62 +463,77 @@ class SerialConsole {
         const reader = new FileReader();
         reader.onload = (e) => {
             const content = e.target.result;
-            this.clearReceive();
+            this.clearReceive(); 
             
-            // 模拟写入
-            const lines = content.split('\n');
+            // 1. 设置纯文本
+            this.monacoModel.setValue(content);
+            this.elements.byteCount.textContent = new TextEncoder().encode(content).length;
             
-            this.lastParsedTime = null;
-            
-            // 优化：构建带 Delta 的大字符串一次性 setValue
-            let fullTextWithDelta = '';
+            // 2. 重新计算所有行的时间差
+            const lineCount = this.monacoModel.getLineCount();
             const newDecorations = [];
-            let currentLine = 1;
             
-            lines.forEach((line, index) => {
-                if (!line.trim()) return; // 跳过空行导入
-                
-                let prefix = '       ';
-                let decoClass = null;
-                
-                const timeMatch = line.match(/^\[(\d{2}):(\d{2}):(\d{2})\/(\d{3})\]/);
+            // 重置状态，确保从文件第一行开始计算
+            this.sessionStartTime = null;
+            this.lastParsedTime = null;
+
+            for (let i = 1; i <= lineCount; i++) {
+                const lineContent = this.monacoModel.getLineContent(i);
+                if (!lineContent.trim()) continue;
+
+                const timeMatch = lineContent.match(/^\[(\d{2}):(\d{2}):(\d{2})\/(\d{3})\]/);
                 if (timeMatch) {
                     const now = new Date();
                     now.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]), parseInt(timeMatch[3]), parseInt(timeMatch[4]));
                     const t = now.getTime();
                     
+                    // 关键：将文件中发现的第一个时间戳设为 T+0
+                    if (this.sessionStartTime === null) this.sessionStartTime = t;
+                    
+                    let startStr = 'T+0.000s';
+                    let deltaStr = '+0ms';
+                    let decorationClass = 'delta-normal';
+
+                    // 计算 Total
+                    if (this.sessionStartTime !== null) {
+                        const diffStart = t - this.sessionStartTime;
+                        if (diffStart >= 0) startStr = `T+${(diffStart/1000).toFixed(3)}s`;
+                    }
+
+                    // 计算 Delta
                     if (this.lastParsedTime !== null) {
                         const diff = t - this.lastParsedTime;
                         if (diff >= 0 && diff < 3600000) {
-                            if (diff >= 1000) prefix = `+${(diff/1000).toFixed(2)}s `;
-                            else prefix = `+${diff}ms `.padEnd(7, ' ');
+                            if (diff >= 1000) deltaStr = `+${(diff/1000).toFixed(2)}s`;
+                            else deltaStr = `+${diff}ms`;
                             
-                            if (diff >= 2000) decoClass = 'delta-2000';
-                            else if (diff >= 1000) decoClass = 'delta-1000';
-                            else if (diff >= 300) decoClass = 'delta-300';
-                            else if (diff >= 100) decoClass = 'delta-100';
-                            else decoClass = 'delta-normal';
+                            if (diff >= 2000) decorationClass = 'delta-2000';
+                            else if (diff >= 1000) decorationClass = 'delta-1000';
+                            else if (diff >= 300) decorationClass = 'delta-300';
+                            else if (diff >= 100) decorationClass = 'delta-100';
                         }
                     }
                     this.lastParsedTime = t;
-                }
-                
-                fullTextWithDelta += prefix + line + (index < lines.length - 1 ? '\n' : '');
-                
-                if (decoClass) {
+
+                    const displayContent = `${startStr.padEnd(10, ' ')} | ${deltaStr.padEnd(7, ' ')}   `;
+                    
                     newDecorations.push({
-                        range: new monaco.Range(currentLine, 1, currentLine, prefix.length + 1),
-                        options: { inlineClassName: decoClass }
+                        range: new monaco.Range(i, 1, i, 1),
+                        options: {
+                            isWholeLine: true,
+                            before: {
+                                content: displayContent,
+                                inlineClassName: `delta-base ${decorationClass}`
+                            }
+                        }
                     });
                 }
-                currentLine++;
-            });
+            }
             
-            this.monacoModel.setValue(fullTextWithDelta);
+            // 批量应用装饰器
             const addedIds = this.monacoModel.deltaDecorations([], newDecorations);
             this.editorDecorations.push(...addedIds);
             
-            this.elements.byteCount.textContent = new TextEncoder().encode(content).length;
             this.log(`已加载文件: ${file.name}`, 'success');
             this.elements.fileInput.value = '';
         };
@@ -565,6 +550,7 @@ class SerialConsole {
         }
         this.elements.byteCount.textContent = '0';
         this.lastParsedTime = null;
+        this.sessionStartTime = null; 
     }
 
     async requestNewPort() {
@@ -722,7 +708,7 @@ if (typeof DesktopSystem !== 'undefined') {
         id: 'serial',
         title: '串口调试助手',
         icon: '🔌',
-        width: '900px',
+        width: '980px',
         height: '750px',
         content: (instanceId) => {
             setTimeout(() => { new SerialConsole(`serial-app-${instanceId}`); }, 0);
@@ -757,12 +743,13 @@ if (!document.getElementById('serial-console-style')) {
     
     .receive-window { flex: 1; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; }
     
-    /* Delta Colors for Monaco */
+    /* Delta Colors for Monaco Decorations */
+    .delta-base { opacity: 0.8; font-size: 11px; font-family: 'Consolas', monospace; display: inline-block; }
     .delta-normal { color: #999; }
     .delta-100 { color: #2196F3 !important; font-weight: bold; }
     .delta-300 { color: #FF9800 !important; font-weight: bold; }
     .delta-1000 { color: #F44336 !important; font-weight: bold; }
-    .delta-2000 { color: #9C27B0 !important; font-weight: bold; background: rgba(156, 39, 176, 0.1); }
+    .delta-2000 { color: #9C27B0 !important; font-weight: bold; }
     
     textarea { flex: 1; resize: none; border: 1px solid #ddd; border-radius: 4px; padding: 8px; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.4; outline: none; }
     textarea:focus { border-color: #2196F3; }
