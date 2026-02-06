@@ -2,6 +2,7 @@
  * js/apps/serial.js
  * 串口控制台应用 - 使用 Web Serial API 与串口设备通信
  * 修复版：支持设备请求、二进制Hex显示、流式中文解码
+ * 修改版：增加时间戳(HH:MM:SS/ms)、日志导入导出、默认开启时间戳
  */
 
 class SerialConsole {
@@ -13,10 +14,11 @@ class SerialConsole {
         this.isConnected = false;
         this.keepReading = false;
         this.textDecoder = new TextDecoder(); // 复用解码器实例
+        this.lastMsgEndsWithNewline = true; // 用于控制时间戳显示的标志位
         
         // 默认串口配置
         this.config = {
-            baudRate: 9600,
+            baudRate: 115200,
             dataBits: 8,
             stopBits: 1,
             parity: 'none',
@@ -49,18 +51,21 @@ class SerialConsole {
                         </div>
                         <div class="config-item">
                             <label>波特率</label>
-                            <select data-id="baudRate">
-                                <option value="1200">1200</option>
-                                <option value="2400">2400</option>
-                                <option value="4800">4800</option>
-                                <option value="9600" selected>9600</option>
-                                <option value="19200">19200</option>
-                                <option value="38400">38400</option>
-                                <option value="57600">57600</option>
-                                <option value="115200">115200</option>
-                                <option value="230400">230400</option>
-                                <option value="921600">921600</option>
-                            </select>
+                            <input type="number" data-id="baudRate" value="115200" min="110" max="4000000" step="1" list="baudRateList" style="min-width: 80px;">
+                            <datalist id="baudRateList">
+                                <option value="1200">
+                                <option value="2400">
+                                <option value="4800">
+                                <option value="9600">
+                                <option value="19200">
+                                <option value="38400">
+                                <option value="57600">
+                                <option value="115200">
+                                <option value="230400">
+                                <option value="460800">
+                                <option value="921600">
+                                <option value="2000000">
+                            </datalist>
                         </div>
                         <div class="config-item">
                             <label>数据位</label>
@@ -108,8 +113,11 @@ class SerialConsole {
                             <h4>接收区 <span class="subtitle">(来自设备)</span></h4>
                             <div class="receive-options">
                                 <label><input type="checkbox" data-id="autoScroll" checked> 自动滚动</label>
-                                <label><input type="checkbox" data-id="showTimestamp"> 时间戳</label>
+                                <label><input type="checkbox" data-id="showTimestamp" checked> 时间戳</label>
                                 <label><input type="checkbox" data-id="hexDisplay"> HEX显示</label>
+                                <button data-id="exportBtn" class="btn secondary" style="padding: 2px 6px; font-size: 11px;" title="保存接收内容">导出</button>
+                                <button data-id="importBtn" class="btn secondary" style="padding: 2px 6px; font-size: 11px;" title="加载本地文件">导入</button>
+                                <input type="file" data-id="fileInput" accept=".txt,.log" style="display:none">
                                 <span class="receive-info">
                                     RX: <span data-id="byteCount">0</span> Bytes | Lines: <span data-id="lineCount">0</span>
                                 </span>
@@ -133,13 +141,6 @@ class SerialConsole {
                             <button data-id="repeatSendBtn" class="btn secondary" disabled>循环发送</button>
                             <input type="number" data-id="repeatInterval" min="50" max="60000" value="1000" placeholder="ms" style="width: 80px;">
                         </div>
-                    </div>
-                </div>
-                
-                <div class="serial-footer">
-                    <div class="log-section">
-                        <h4>系统日志</h4>
-                        <div data-id="logArea" class="log-area"></div>
                     </div>
                 </div>
             </div>
@@ -167,7 +168,6 @@ class SerialConsole {
             statusText: $('statusText'),
             byteCount: $('byteCount'),
             lineCount: $('lineCount'),
-            logArea: $('logArea'),
             // Checkboxes
             autoScroll: $('autoScroll'),
             showTimestamp: $('showTimestamp'),
@@ -175,7 +175,11 @@ class SerialConsole {
             appendNewline: $('appendNewline'),
             hexSend: $('hexSend'),
             repeatSendBtn: $('repeatSendBtn'),
-            repeatInterval: $('repeatInterval')
+            repeatInterval: $('repeatInterval'),
+            // Import/Export
+            exportBtn: $('exportBtn'),
+            importBtn: $('importBtn'),
+            fileInput: $('fileInput')
         };
     }
     
@@ -188,11 +192,23 @@ class SerialConsole {
         this.elements.sendBtn.addEventListener('click', () => this.sendData());
         this.elements.clearSendBtn.addEventListener('click', () => { this.elements.sendArea.value = ''; this.updateSendButton(); });
         
+        // 导入导出事件
+        this.elements.exportBtn.addEventListener('click', () => this.exportLog());
+        this.elements.importBtn.addEventListener('click', () => this.elements.fileInput.click());
+        this.elements.fileInput.addEventListener('change', (e) => this.importLog(e));
+        
         this.elements.sendArea.addEventListener('input', () => this.updateSendButton());
         
         // 配置变化监听
         ['baudRate', 'dataBits', 'stopBits'].forEach(key => {
             this.elements[key].addEventListener('change', (e) => this.config[key] = parseInt(e.target.value));
+        });
+        // 波特率实时更新
+        this.elements.baudRate.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            if (!isNaN(value) && value > 0) {
+                this.config.baudRate = value;
+            }
         });
         this.elements.parity.addEventListener('change', (e) => this.config.parity = e.target.value);
         
@@ -200,6 +216,55 @@ class SerialConsole {
         this.refreshPorts();
     }
     
+    // 导出日志
+    exportLog() {
+        const content = this.elements.receiveArea.value;
+        if (!content) {
+            this.log('没有可导出的内容', 'warning');
+            return;
+        }
+        try {
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            a.href = url;
+            a.download = `serial_log_${timestamp}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            this.log('日志导出成功', 'success');
+        } catch (e) {
+            this.log(`导出失败: ${e.message}`, 'error');
+        }
+    }
+
+    // 导入日志
+    importLog(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const content = e.target.result;
+            this.elements.receiveArea.value = content;
+            
+            // 更新统计
+            this.elements.byteCount.textContent = new TextEncoder().encode(content).length;
+            this.elements.lineCount.textContent = content.split('\n').length;
+            
+            this.log(`已加载文件: ${file.name}`, 'success');
+            // 重置input以允许重复选择同一文件
+            this.elements.fileInput.value = '';
+        };
+        reader.onerror = () => {
+            this.log('读取文件失败', 'error');
+            this.elements.fileInput.value = '';
+        };
+        reader.readAsText(file);
+    }
+
     // 请求用户授权新设备 (必须由用户手势触发)
     async requestNewPort() {
         try {
@@ -278,6 +343,7 @@ class SerialConsole {
             
             this.isConnected = true;
             this.keepReading = true;
+            this.lastMsgEndsWithNewline = true; // 重置换行状态
             this.updateConnectionStatus();
             this.log(`已连接 (波特率: ${this.config.baudRate})`, 'success');
             
@@ -360,15 +426,31 @@ class SerialConsole {
             displayStr = hexArr.join(' ') + ' ';
         } else {
             // 文本模式：使用流式解码处理多字节字符（中文）
-            // 注意：这里简化处理，直接输出到界面。
-            // 严谨做法是维护一个buffer，但为了控制台实时性，直接解码流
             displayStr = this.textDecoder.decode(dataView, { stream: true });
         }
         
-        if (showTime) {
-            // 简单的换行检测，避免每小段数据都加时间戳，仅在上一段以换行结尾时加
-            // 这里为了演示简单，直接加在头部（实际场景可能需要更复杂的行缓冲逻辑）
-            // displayStr = `[${new Date().toLocaleTimeString()}] ${displayStr}`; 
+        if (showTime && displayStr.length > 0) {
+            // 构造时间戳字符串 HH:MM:SS/毫秒
+            const now = new Date();
+            const h = now.getHours().toString().padStart(2, '0');
+            const m = now.getMinutes().toString().padStart(2, '0');
+            const s = now.getSeconds().toString().padStart(2, '0');
+            const ms = now.getMilliseconds().toString().padStart(3, '0');
+            const timeStr = `[${h}:${m}:${s}/${ms}] `;
+
+            // 智能添加时间戳：
+            // 1. 如果上一段数据以换行结束，则在当前数据开头添加
+            // 2. 如果当前数据中间包含换行，则在换行后添加（可选，这里简单处理仅在开头加）
+            if (this.lastMsgEndsWithNewline) {
+                displayStr = timeStr + displayStr;
+            }
+            
+            // 更新状态，判断本次数据是否以换行结尾
+            // 检查 \n 或 \r
+            this.lastMsgEndsWithNewline = /[\\r\\n]$/.test(displayStr);
+            
+            // 如果需要在每行中间也加时间戳（处理一次收到多行的情况），可以使用 replace
+            // displayStr = displayStr.replace(/(\\r\\n|\\n|\\r)/g, `$1${timeStr}`);
         }
 
         this.appendToReceiveArea(displayStr);
@@ -468,11 +550,22 @@ class SerialConsole {
     }
     
     log(msg, type = 'info') {
-        const div = document.createElement('div');
-        div.className = `log-entry log-${type}`;
-        div.innerHTML = `<span class="time">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
-        this.elements.logArea.appendChild(div);
-        this.elements.logArea.scrollTop = this.elements.logArea.scrollHeight;
+        const timestamp = new Date().toLocaleTimeString();
+        const formattedMsg = `[${timestamp}] ${msg}`;
+        
+        switch(type) {
+            case 'error':
+                console.error(formattedMsg);
+                break;
+            case 'warning':
+                console.warn(formattedMsg);
+                break;
+            case 'success':
+                console.info(formattedMsg);
+                break;
+            default:
+                console.info(formattedMsg);
+        }
     }
 }
 
@@ -505,7 +598,11 @@ if (!document.getElementById('serial-console-style')) {
     .config-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .config-item { display: flex; flex-direction: column; gap: 2px; }
     .config-item label { font-size: 10px; color: #666; font-weight: 500; text-align: center; }
-    .config-item select { padding: 3px 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px; min-width: 60px; }
+    .config-item select, .config-item input { padding: 3px 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px; min-width: 80px; }
+    .config-item input[type="number"]::-webkit-inner-spin-button, 
+    .config-item input[type="number"]::-webkit-outer-spin-button { 
+        opacity: 1; margin: 0; height: auto; 
+    }
     .config-item .btn { padding: 4px 8px; font-size: 11px; white-space: nowrap; }
     
     .serial-main { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
@@ -527,13 +624,7 @@ if (!document.getElementById('serial-console-style')) {
     
     .send-controls { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
     
-    .log-section { height: 50px; margin-top: 8px; background: #fff; padding: 6px; border-radius: 6px; display: flex; flex-direction: column; }
-    .log-area { flex: 1; overflow-y: auto; font-family: monospace; font-size: 11px; border: 1px solid #eee; padding: 4px; background: #fcfcfc; }
-    .log-entry { padding: 1px 0; border-bottom: 1px dashed #f0f0f0; }
-    .log-entry .time { color: #999; margin-right: 6px; }
-    .log-error { color: #d32f2f; }
-    .log-success { color: #388e3c; }
-    .log-warning { color: #f57c00; }
+
     
     .btn { padding: 5px 12px; border: 1px solid transparent; border-radius: 4px; font-size: 12px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(100%); }
