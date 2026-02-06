@@ -4,7 +4,7 @@
  * 修复版：支持设备请求、二进制Hex显示、流式中文解码
  * 修改版：增加时间戳(HH:MM:SS/ms)、日志导入导出、默认开启时间戳
  * 增强版：使用 Monaco Editor 显示日志，支持 Delta Time 高亮
- * 修复：移除构造函数中的语法错误
+ * 优化版：增加缓存行数限制，修复空行过多问题
  */
 
 class SerialConsole {
@@ -35,7 +35,8 @@ class SerialConsole {
             dataBits: 8,
             stopBits: 1,
             parity: 'none',
-            flowControl: 'none'
+            flowControl: 'none',
+            maxLines: 10000 // 默认最大行数
         };
         
         this.initUI();
@@ -45,7 +46,6 @@ class SerialConsole {
             this.initMonaco();
         }).catch(err => {
             this.log(`Monaco Editor 加载失败: ${err.message}`, 'error');
-            // 降级处理或提示用户检查网络
             if (this.elements && this.elements.receiveContainer) {
                 this.elements.receiveContainer.innerHTML = '<div style="color:red;padding:10px;">无法加载编辑器组件，请检查网络连接。<br>Error: ' + err.message + '</div>';
             }
@@ -100,12 +100,12 @@ class SerialConsole {
             value: '',
             language: 'plaintext',
             theme: 'serialLogTheme',
-            readOnly: true, // 只读，防止用户误改日志
+            readOnly: true, // 只读
             automaticLayout: true,
             scrollBeyondLastLine: false,
             wordWrap: 'on',
             minimap: { enabled: false },
-            lineNumbers: 'off', // 类似日志视图，通常不需要行号
+            lineNumbers: 'off', 
             folding: false,
             renderLineHighlight: 'all',
             fontFamily: 'Consolas, "Courier New", monospace',
@@ -119,7 +119,7 @@ class SerialConsole {
 
         // 处理缓冲的数据
         if (this.pendingData.length > 0) {
-            this.pendingData.forEach(item => this.appendLogToEditor(item.text, item.isNewLine));
+            this.pendingData.forEach(item => this.writeToMonaco(item));
             this.pendingData = [];
         }
     }
@@ -157,7 +157,13 @@ class SerialConsole {
                         <div class="config-item"><button data-id="connectBtn" class="btn primary">连接</button></div>
                         <div class="config-item"><button data-id="disconnectBtn" class="btn danger" disabled>断开</button></div>
                         <div class="config-item"><button data-id="clearBtn" class="btn secondary">清空</button></div>
-                        <div class="config-item" style="margin-left: auto; display: flex; align-items: center; gap: 5px; padding-right: 5px;">
+                        
+                        <!-- 状态与缓存设置 -->
+                        <div class="config-item" style="margin-left:auto; border-left:1px solid #eee; padding-left:8px;">
+                            <label>最大行数</label>
+                            <input type="number" data-id="maxLines" value="1000" min="100" step="100" style="width: 60px;">
+                        </div>
+                        <div class="config-item" style="display: flex; align-items: center; gap: 5px; padding-right: 5px;">
                             <span data-id="statusIndicator" style="color: #F44336; font-size: 14px;">●</span>
                             <span data-id="statusText" style="font-size: 11px; color: #F44336; font-weight: 500;">未连接</span>
                         </div>
@@ -210,7 +216,7 @@ class SerialConsole {
             clearSendBtn: $('clearSendBtn'), statusIndicator: $('statusIndicator'), statusText: $('statusText'),
             byteCount: $('byteCount'), autoScroll: $('autoScroll'), showTimestamp: $('showTimestamp'), hexDisplay: $('hexDisplay'),
             appendNewline: $('appendNewline'), hexSend: $('hexSend'), repeatSendBtn: $('repeatSendBtn'), repeatInterval: $('repeatInterval'),
-            exportBtn: $('exportBtn'), importBtn: $('importBtn'), fileInput: $('fileInput')
+            exportBtn: $('exportBtn'), importBtn: $('importBtn'), fileInput: $('fileInput'), maxLines: $('maxLines')
         };
     }
     
@@ -226,6 +232,7 @@ class SerialConsole {
         this.elements.importBtn.addEventListener('click', () => this.elements.fileInput.click());
         this.elements.fileInput.addEventListener('change', (e) => this.importLog(e));
         this.elements.sendArea.addEventListener('input', () => this.updateSendButton());
+        
         ['baudRate', 'dataBits', 'stopBits'].forEach(key => {
             this.elements[key].addEventListener('change', (e) => this.config[key] = parseInt(e.target.value));
         });
@@ -234,108 +241,17 @@ class SerialConsole {
             if (!isNaN(value) && value > 0) this.config.baudRate = value;
         });
         this.elements.parity.addEventListener('change', (e) => this.config.parity = e.target.value);
-        this.refreshPorts();
-    }
-
-    // ================= 核心逻辑：Monaco 渲染 =================
-
-    parseTimestampFromLine(lineText) {
-        const regex = /^\[(\d{2}):(\d{2}):(\d{2})\/(\d{3})\]/;
-        const match = lineText.match(regex);
-        if (match) {
-            const now = new Date();
-            now.setHours(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]), parseInt(match[4]));
-            return now.getTime();
-        }
-        return null;
-    }
-
-    /**
-     * 向编辑器追加日志
-     * @param {string} text 原始文本（可能包含时间戳）
-     * @param {boolean} isNewLine 是否是新的一行
-     */
-    appendLogToEditor(text, isNewLine) {
-        if (!this.isMonacoReady) {
-            this.pendingData.push({ text, isNewLine });
-            return;
-        }
-
-        // 1. 计算时间差前缀
-        let prefix = '';
-        let decorationClass = null;
-
-        if (isNewLine) {
-            const currentTime = this.parseTimestampFromLine(text);
-            if (currentTime !== null) {
-                if (this.lastParsedTime !== null) {
-                    const diff = currentTime - this.lastParsedTime;
-                    if (diff >= 0) {
-                        // 格式化 Delta
-                        if (diff >= 1000) prefix = `+${(diff/1000).toFixed(2)}s `;
-                        else prefix = `+${diff}ms `.padEnd(7, ' '); // 对齐
-
-                        // 确定颜色
-                        if (diff >= 2000) decorationClass = 'delta-2000';
-                        else if (diff >= 1000) decorationClass = 'delta-1000';
-                        else if (diff >= 300) decorationClass = 'delta-300';
-                        else if (diff >= 100) decorationClass = 'delta-100';
-                        else decorationClass = 'delta-normal';
-                    } else {
-                        prefix = '       '; // 占位
-                    }
-                } else {
-                    prefix = '       '; // 第一行占位
-                }
-                this.lastParsedTime = currentTime;
+        
+        // 监听最大行数变化
+        this.elements.maxLines.addEventListener('change', (e) => {
+            const val = parseInt(e.target.value);
+            if (val > 0) {
+                this.config.maxLines = val;
+                this.checkBufferLimit(true); // 立即应用
             }
-        }
-
-        const fullText = prefix + text;
-        const model = this.monacoModel;
-        const lastLineIndex = model.getLineCount();
-        const lastLineLength = model.getLineLength(lastLineIndex);
-
-        // 2. 写入编辑器
-        // 如果是新行，在末尾追加换行符再加内容；如果是追加，直接加
+        });
         
-        let editOp;
-        let insertLine = lastLineIndex;
-        
-        if (isNewLine && lastLineLength > 0) {
-            // 另起一行
-            editOp = {
-                range: new monaco.Range(lastLineIndex, lastLineLength + 1, lastLineIndex, lastLineLength + 1),
-                text: '\n' + fullText
-            };
-            insertLine = lastLineIndex + 1;
-        } else {
-            // 追加到当前行 (或者编辑器是空的)
-            editOp = {
-                range: new monaco.Range(lastLineIndex, lastLineLength + 1, lastLineIndex, lastLineLength + 1),
-                text: fullText
-            };
-        }
-
-        model.applyEdits([editOp]);
-
-        // 3. 添加颜色装饰 (如果有 Delta)
-        if (decorationClass && prefix.trim().length > 0) {
-            const range = new monaco.Range(insertLine, 1, insertLine, prefix.length + 1);
-            
-            const newDecorations = [{
-                range: range,
-                options: { inlineClassName: decorationClass }
-            }];
-            
-            const addedIds = model.deltaDecorations([], newDecorations);
-            this.editorDecorations.push(...addedIds);
-        }
-
-        // 4. 自动滚动
-        if (this.elements.autoScroll.checked) {
-            this.editor.revealLine(model.getLineCount());
-        }
+        this.refreshPorts();
     }
 
     // ================= 数据流处理 =================
@@ -353,6 +269,9 @@ class SerialConsole {
             chunk = this.textDecoder.decode(dataView, { stream: true });
         }
         
+        // 修复：移除 \r，防止 \r\n 造成双重换行（Monaco 会自动处理换行，不需要 \r）
+        chunk = chunk.replace(/\r/g, '');
+
         const currentBytes = parseInt(this.elements.byteCount.textContent) || 0;
         this.elements.byteCount.textContent = currentBytes + dataView.byteLength;
 
@@ -361,18 +280,40 @@ class SerialConsole {
         const timeStr = `[${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}/${now.getMilliseconds().toString().padStart(3,'0')}] `;
         
         if (showTime) {
+            // 逻辑优化：只有当上一段明确以换行符结尾时，才在开头加时间戳
             if (this.lastMsgEndsWithNewline) {
                 processedChunk += timeStr;
                 this.lastMsgEndsWithNewline = false;
             }
+            
             if (chunk.includes('\n')) {
                 const parts = chunk.split('\n');
-                for (let i = 0; i < parts.length - 1; i++) parts[i+1] = timeStr + parts[i+1];
+                // parts = ["Line1", "Line2", ""] 如果 chunk 以 \n 结尾
+                
+                for (let i = 0; i < parts.length - 1; i++) {
+                    // 在每个换行符后插入时间戳
+                    // 注意：parts[i] 是前一行内容，parts[i+1] 是新行内容
+                    // 我们需要在 parts[i] 后面加 \n + timeStr + parts[i+1]
+                    // 简单做法：直接修改 parts[i+1]
+                    parts[i+1] = timeStr + parts[i+1];
+                }
                 processedChunk += parts.join('\n');
             } else {
                 processedChunk += chunk;
             }
-            if (chunk.endsWith('\n') || chunk.endsWith('\r')) this.lastMsgEndsWithNewline = true;
+            
+            // 更新状态：如果 chunk 以 \n 结尾，下次开头需要加时间戳
+            if (chunk.endsWith('\n')) {
+                this.lastMsgEndsWithNewline = true;
+                // 移除末尾多余的时间戳（因为 split 逻辑可能会在最后一个空字符串前加时间戳）
+                // 如果 split 结果最后一个是空串且被加了 timeStr，说明我们在行尾加了时间戳但还没内容
+                // 这会导致显示一行只有时间戳的空行。
+                // 修正：如果 processedChunk 结尾是 `\n[Time] `，去掉 `[Time] `，保留 `\n`，留给下次加
+                if (processedChunk.endsWith('\n' + timeStr)) {
+                    processedChunk = processedChunk.slice(0, -timeStr.length);
+                    // 此时 lastMsgEndsWithNewline = true，下次进来会加
+                }
+            }
         } else {
             processedChunk = chunk;
         }
@@ -396,12 +337,16 @@ class SerialConsole {
     }
     
     writeToMonaco(text) {
-        if (!this.isMonacoReady) return;
+        if (!this.isMonacoReady) {
+            this.pendingData.push(text);
+            return;
+        }
         const model = this.monacoModel;
         
         // 1. 写入文本
         const lastLine = model.getLineCount();
         const lastLen = model.getLineLength(lastLine);
+        
         model.applyEdits([{
             range: new monaco.Range(lastLine, lastLen + 1, lastLine, lastLen + 1),
             text: text
@@ -416,8 +361,42 @@ class SerialConsole {
             this.checkAndAddDelta(currentLastLine - 1);
         }
         
+        // 3. 检查行数限制 (缓存清理)
+        this.checkBufferLimit();
+
         if (this.elements.autoScroll.checked) {
             this.editor.revealLine(currentLastLine);
+        }
+    }
+
+    // 缓存行数限制逻辑
+    checkBufferLimit(force = false) {
+        if (!this.monacoModel) return;
+        
+        const maxLines = this.config.maxLines;
+        const currentLines = this.monacoModel.getLineCount();
+        
+        // 只有当超出限制一定数量（例如10%）时才触发删除，避免频繁操作 DOM
+        // 或者如果是强制执行（用户修改了设置）
+        const threshold = force ? 0 : Math.max(10, maxLines * 0.1);
+        
+        if (currentLines > maxLines + threshold) {
+            const linesToDelete = currentLines - maxLines;
+            
+            // 删除从第1行开始的 linesToDelete 行
+            // Range(startLine, startCol, endLine, endCol)
+            // 要删除 N 行，结束位置应该是第 N+1 行的开头 (或者第 N 行的末尾 + 换行符)
+            // 简单做法：Range(1, 1, linesToDelete + 1, 1) 会选中前 N 行整行
+            
+            this.monacoModel.applyEdits([{
+                range: new monaco.Range(1, 1, linesToDelete + 1, 1),
+                text: null
+            }]);
+            
+            // 注意：删除行后，editorDecorations 中的 range 会自动调整，
+            // 但已经被删除的行的 decoration 应该会被 Monaco 自动清理。
+            // 我们不需要手动清理 editorDecorations 数组，除非我们想保持它很小。
+            // 实际上 Monaco 返回的 decoration ID 是字符串，我们只管存。
         }
     }
     
@@ -527,6 +506,8 @@ class SerialConsole {
             let currentLine = 1;
             
             lines.forEach((line, index) => {
+                if (!line.trim()) return; // 跳过空行导入
+                
                 let prefix = '       ';
                 let decoClass = null;
                 
@@ -579,7 +560,6 @@ class SerialConsole {
     clearReceive() {
         if (this.monacoModel) {
             this.monacoModel.setValue('');
-            // 清除所有装饰器
             this.monacoModel.deltaDecorations(this.editorDecorations, []);
             this.editorDecorations = [];
         }
