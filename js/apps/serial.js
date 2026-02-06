@@ -3,6 +3,8 @@
  * 串口控制台应用 - 使用 Web Serial API 与串口设备通信
  * 修复版：支持设备请求、二进制Hex显示、流式中文解码
  * 修改版：增加时间戳(HH:MM:SS/ms)、日志导入导出、默认开启时间戳
+ * 增强版：使用 Monaco Editor 显示日志，支持 Delta Time 高亮
+ * 修复：移除构造函数中的语法错误
  */
 
 class SerialConsole {
@@ -13,8 +15,19 @@ class SerialConsole {
         this.writer = null;
         this.isConnected = false;
         this.keepReading = false;
-        this.textDecoder = new TextDecoder(); // 复用解码器实例
-        this.lastMsgEndsWithNewline = true; // 用于控制时间戳显示的标志位
+        this.textDecoder = new TextDecoder(); 
+        
+        // Monaco Editor 相关
+        this.editor = null;
+        this.monacoModel = null;
+        this.editorDecorations = []; // 存储当前的装饰器ID
+        this.pendingData = []; // Monaco加载完成前的数据缓冲
+        this.isMonacoReady = false;
+
+        // 状态变量
+        this.lastMsgEndsWithNewline = true; 
+        this.lastParsedTime = null; 
+        this.receiveBuffer = ''; 
         
         // 默认串口配置
         this.config = {
@@ -26,9 +39,20 @@ class SerialConsole {
         };
         
         this.initUI();
+        
+        // 异步加载 Monaco
+        this.loadMonaco().then(() => {
+            this.initMonaco();
+        }).catch(err => {
+            this.log(`Monaco Editor 加载失败: ${err.message}`, 'error');
+            // 降级处理或提示用户检查网络
+            if (this.elements && this.elements.receiveContainer) {
+                this.elements.receiveContainer.innerHTML = '<div style="color:red;padding:10px;">无法加载编辑器组件，请检查网络连接。<br>Error: ' + err.message + '</div>';
+            }
+        });
+
         this.bindEvents();
         
-        // 监听全局串口插拔事件
         navigator.serial.addEventListener('disconnect', (e) => {
             if (this.port === e.target) {
                 this.log('检测到设备断开连接', 'warning');
@@ -37,7 +61,69 @@ class SerialConsole {
         });
     }
     
-    // 初始化用户界面
+    // 动态加载 Monaco Editor Loader
+    loadMonaco() {
+        return new Promise((resolve, reject) => {
+            if (window.monaco) {
+                resolve();
+                return;
+            }
+            const loaderScript = document.createElement('script');
+            loaderScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js';
+            loaderScript.onload = () => {
+                require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+                require(['vs/editor/editor.main'], () => {
+                    resolve();
+                });
+            };
+            loaderScript.onerror = reject;
+            document.body.appendChild(loaderScript);
+        });
+    }
+
+    initMonaco() {
+        const container = this.elements.receiveContainer;
+        container.innerHTML = ''; // 清空占位符
+
+        // 创建自定义主题
+        monaco.editor.defineTheme('serialLogTheme', {
+            base: 'vs',
+            inherit: true,
+            rules: [],
+            colors: {
+                'editor.background': '#fafafa',
+                'editor.lineHighlightBackground': '#f0f0f0'
+            }
+        });
+
+        this.editor = monaco.editor.create(container, {
+            value: '',
+            language: 'plaintext',
+            theme: 'serialLogTheme',
+            readOnly: true, // 只读，防止用户误改日志
+            automaticLayout: true,
+            scrollBeyondLastLine: false,
+            wordWrap: 'on',
+            minimap: { enabled: false },
+            lineNumbers: 'off', // 类似日志视图，通常不需要行号
+            folding: false,
+            renderLineHighlight: 'all',
+            fontFamily: 'Consolas, "Courier New", monospace',
+            fontSize: 12,
+            contextmenu: true,
+            mouseWheelZoom: true
+        });
+
+        this.monacoModel = this.editor.getModel();
+        this.isMonacoReady = true;
+
+        // 处理缓冲的数据
+        if (this.pendingData.length > 0) {
+            this.pendingData.forEach(item => this.appendLogToEditor(item.text, item.isNewLine));
+            this.pendingData = [];
+        }
+    }
+
     initUI() {
         this.container.innerHTML = `
             <div class="serial-console">
@@ -45,64 +131,35 @@ class SerialConsole {
                     <div class="config-row">
                         <div class="config-item">
                             <label>端口</label>
-                            <select data-id="portSelect">
-                                <option value="">选择设备...</option>
-                            </select>
+                            <select data-id="portSelect"><option value="">选择设备...</option></select>
                         </div>
                         <div class="config-item">
                             <label>波特率</label>
                             <input type="number" data-id="baudRate" value="115200" min="110" max="4000000" step="1" list="baudRateList" style="min-width: 80px;">
                             <datalist id="baudRateList">
-                                <option value="1200">
-                                <option value="2400">
-                                <option value="4800">
-                                <option value="9600">
-                                <option value="19200">
-                                <option value="38400">
-                                <option value="57600">
-                                <option value="115200">
-                                <option value="230400">
-                                <option value="460800">
-                                <option value="921600">
-                                <option value="2000000">
+                                <option value="9600"><option value="115200"><option value="921600">
                             </datalist>
                         </div>
                         <div class="config-item">
                             <label>数据位</label>
-                            <select data-id="dataBits">
-                                <option value="7">7</option>
-                                <option value="8" selected>8</option>
-                            </select>
+                            <select data-id="dataBits"><option value="8" selected>8</option></select>
                         </div>
                         <div class="config-item">
                             <label>停止位</label>
-                            <select data-id="stopBits">
-                                <option value="1" selected>1</option>
-                                <option value="2">2</option>
-                            </select>
+                            <select data-id="stopBits"><option value="1" selected>1</option></select>
                         </div>
                         <div class="config-item">
                             <label>校验位</label>
-                            <select data-id="parity">
-                                <option value="none" selected>无</option>
-                                <option value="even">偶</option>
-                                <option value="odd">奇</option>
-                            </select>
+                            <select data-id="parity"><option value="none" selected>无</option></select>
                         </div>
-                        <div class="config-item">
-                            <button data-id="requestPortBtn" class="btn primary-outline" title="授权新设备">➕ 选择设备</button>
-                        </div>
-                        <div class="config-item">
-                            <button data-id="refreshPorts" class="btn secondary" title="刷新已授权设备列表">刷新</button>
-                        </div>
-                        <div class="config-item">
-                            <button data-id="connectBtn" class="btn primary">连接</button>
-                        </div>
-                        <div class="config-item">
-                            <button data-id="disconnectBtn" class="btn danger" disabled>断开</button>
-                        </div>
-                        <div class="config-item">
-                            <button data-id="clearBtn" class="btn secondary">清空窗口</button>
+                        <div class="config-item"><button data-id="requestPortBtn" class="btn primary-outline">➕ 选择设备</button></div>
+                        <div class="config-item"><button data-id="refreshPorts" class="btn secondary">刷新</button></div>
+                        <div class="config-item"><button data-id="connectBtn" class="btn primary">连接</button></div>
+                        <div class="config-item"><button data-id="disconnectBtn" class="btn danger" disabled>断开</button></div>
+                        <div class="config-item"><button data-id="clearBtn" class="btn secondary">清空</button></div>
+                        <div class="config-item" style="margin-left: auto; display: flex; align-items: center; gap: 5px; padding-right: 5px;">
+                            <span data-id="statusIndicator" style="color: #F44336; font-size: 14px;">●</span>
+                            <span data-id="statusText" style="font-size: 11px; color: #F44336; font-weight: 500;">未连接</span>
                         </div>
                     </div>
                 </div>
@@ -115,15 +172,14 @@ class SerialConsole {
                                 <label><input type="checkbox" data-id="autoScroll" checked> 自动滚动</label>
                                 <label><input type="checkbox" data-id="showTimestamp" checked> 时间戳</label>
                                 <label><input type="checkbox" data-id="hexDisplay"> HEX显示</label>
-                                <button data-id="exportBtn" class="btn secondary" style="padding: 2px 6px; font-size: 11px;" title="保存接收内容">导出</button>
-                                <button data-id="importBtn" class="btn secondary" style="padding: 2px 6px; font-size: 11px;" title="加载本地文件">导入</button>
+                                <button data-id="exportBtn" class="btn secondary" style="padding: 2px 6px; font-size: 11px;" title="保存接收内容(不含时间差)">导出</button>
+                                <button data-id="importBtn" class="btn secondary" style="padding: 2px 6px; font-size: 11px;" title="加载本地文件并分析时间差">导入</button>
                                 <input type="file" data-id="fileInput" accept=".txt,.log" style="display:none">
-                                <span class="receive-info">
-                                    RX: <span data-id="byteCount">0</span> Bytes | Lines: <span data-id="lineCount">0</span>
-                                </span>
+                                <span class="receive-info">RX: <span data-id="byteCount">0</span> Bytes</span>
                             </div>
                         </div>
-                        <textarea data-id="receiveArea" readonly placeholder="等待数据..."></textarea>
+                        <!-- Monaco Container -->
+                        <div data-id="receiveContainer" class="receive-window">正在加载编辑器组件...</div>
                     </div>
                     
                     <div class="send-section">
@@ -146,40 +202,15 @@ class SerialConsole {
             </div>
         `;
         
-        // 使用 querySelector 在当前容器内查找元素，避免多开窗口ID冲突
         const $ = (selector) => this.container.querySelector(`[data-id="${selector}"]`);
-        
         this.elements = {
-            portSelect: $('portSelect'),
-            baudRate: $('baudRate'),
-            dataBits: $('dataBits'),
-            stopBits: $('stopBits'),
-            parity: $('parity'),
-            connectBtn: $('connectBtn'),
-            disconnectBtn: $('disconnectBtn'),
-            refreshPorts: $('refreshPorts'),
-            requestPortBtn: $('requestPortBtn'),
-            clearBtn: $('clearBtn'),
-            receiveArea: $('receiveArea'),
-            sendArea: $('sendArea'),
-            sendBtn: $('sendBtn'),
-            clearSendBtn: $('clearSendBtn'),
-            statusIndicator: $('statusIndicator'),
-            statusText: $('statusText'),
-            byteCount: $('byteCount'),
-            lineCount: $('lineCount'),
-            // Checkboxes
-            autoScroll: $('autoScroll'),
-            showTimestamp: $('showTimestamp'),
-            hexDisplay: $('hexDisplay'),
-            appendNewline: $('appendNewline'),
-            hexSend: $('hexSend'),
-            repeatSendBtn: $('repeatSendBtn'),
-            repeatInterval: $('repeatInterval'),
-            // Import/Export
-            exportBtn: $('exportBtn'),
-            importBtn: $('importBtn'),
-            fileInput: $('fileInput')
+            portSelect: $('portSelect'), baudRate: $('baudRate'), dataBits: $('dataBits'), stopBits: $('stopBits'), parity: $('parity'),
+            connectBtn: $('connectBtn'), disconnectBtn: $('disconnectBtn'), refreshPorts: $('refreshPorts'), requestPortBtn: $('requestPortBtn'),
+            clearBtn: $('clearBtn'), receiveContainer: $('receiveContainer'), sendArea: $('sendArea'), sendBtn: $('sendBtn'),
+            clearSendBtn: $('clearSendBtn'), statusIndicator: $('statusIndicator'), statusText: $('statusText'),
+            byteCount: $('byteCount'), autoScroll: $('autoScroll'), showTimestamp: $('showTimestamp'), hexDisplay: $('hexDisplay'),
+            appendNewline: $('appendNewline'), hexSend: $('hexSend'), repeatSendBtn: $('repeatSendBtn'), repeatInterval: $('repeatInterval'),
+            exportBtn: $('exportBtn'), importBtn: $('importBtn'), fileInput: $('fileInput')
         };
     }
     
@@ -191,38 +222,275 @@ class SerialConsole {
         this.elements.clearBtn.addEventListener('click', () => this.clearReceive());
         this.elements.sendBtn.addEventListener('click', () => this.sendData());
         this.elements.clearSendBtn.addEventListener('click', () => { this.elements.sendArea.value = ''; this.updateSendButton(); });
-        
-        // 导入导出事件
         this.elements.exportBtn.addEventListener('click', () => this.exportLog());
         this.elements.importBtn.addEventListener('click', () => this.elements.fileInput.click());
         this.elements.fileInput.addEventListener('change', (e) => this.importLog(e));
-        
         this.elements.sendArea.addEventListener('input', () => this.updateSendButton());
-        
-        // 配置变化监听
         ['baudRate', 'dataBits', 'stopBits'].forEach(key => {
             this.elements[key].addEventListener('change', (e) => this.config[key] = parseInt(e.target.value));
         });
-        // 波特率实时更新
         this.elements.baudRate.addEventListener('input', (e) => {
             const value = parseInt(e.target.value);
-            if (!isNaN(value) && value > 0) {
-                this.config.baudRate = value;
-            }
+            if (!isNaN(value) && value > 0) this.config.baudRate = value;
         });
         this.elements.parity.addEventListener('change', (e) => this.config.parity = e.target.value);
-        
-        // 初始刷新
         this.refreshPorts();
     }
-    
-    // 导出日志
-    exportLog() {
-        const content = this.elements.receiveArea.value;
-        if (!content) {
-            this.log('没有可导出的内容', 'warning');
+
+    // ================= 核心逻辑：Monaco 渲染 =================
+
+    parseTimestampFromLine(lineText) {
+        const regex = /^\[(\d{2}):(\d{2}):(\d{2})\/(\d{3})\]/;
+        const match = lineText.match(regex);
+        if (match) {
+            const now = new Date();
+            now.setHours(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]), parseInt(match[4]));
+            return now.getTime();
+        }
+        return null;
+    }
+
+    /**
+     * 向编辑器追加日志
+     * @param {string} text 原始文本（可能包含时间戳）
+     * @param {boolean} isNewLine 是否是新的一行
+     */
+    appendLogToEditor(text, isNewLine) {
+        if (!this.isMonacoReady) {
+            this.pendingData.push({ text, isNewLine });
             return;
         }
+
+        // 1. 计算时间差前缀
+        let prefix = '';
+        let decorationClass = null;
+
+        if (isNewLine) {
+            const currentTime = this.parseTimestampFromLine(text);
+            if (currentTime !== null) {
+                if (this.lastParsedTime !== null) {
+                    const diff = currentTime - this.lastParsedTime;
+                    if (diff >= 0) {
+                        // 格式化 Delta
+                        if (diff >= 1000) prefix = `+${(diff/1000).toFixed(2)}s `;
+                        else prefix = `+${diff}ms `.padEnd(7, ' '); // 对齐
+
+                        // 确定颜色
+                        if (diff >= 2000) decorationClass = 'delta-2000';
+                        else if (diff >= 1000) decorationClass = 'delta-1000';
+                        else if (diff >= 300) decorationClass = 'delta-300';
+                        else if (diff >= 100) decorationClass = 'delta-100';
+                        else decorationClass = 'delta-normal';
+                    } else {
+                        prefix = '       '; // 占位
+                    }
+                } else {
+                    prefix = '       '; // 第一行占位
+                }
+                this.lastParsedTime = currentTime;
+            }
+        }
+
+        const fullText = prefix + text;
+        const model = this.monacoModel;
+        const lastLineIndex = model.getLineCount();
+        const lastLineLength = model.getLineLength(lastLineIndex);
+
+        // 2. 写入编辑器
+        // 如果是新行，在末尾追加换行符再加内容；如果是追加，直接加
+        
+        let editOp;
+        let insertLine = lastLineIndex;
+        
+        if (isNewLine && lastLineLength > 0) {
+            // 另起一行
+            editOp = {
+                range: new monaco.Range(lastLineIndex, lastLineLength + 1, lastLineIndex, lastLineLength + 1),
+                text: '\n' + fullText
+            };
+            insertLine = lastLineIndex + 1;
+        } else {
+            // 追加到当前行 (或者编辑器是空的)
+            editOp = {
+                range: new monaco.Range(lastLineIndex, lastLineLength + 1, lastLineIndex, lastLineLength + 1),
+                text: fullText
+            };
+        }
+
+        model.applyEdits([editOp]);
+
+        // 3. 添加颜色装饰 (如果有 Delta)
+        if (decorationClass && prefix.trim().length > 0) {
+            const range = new monaco.Range(insertLine, 1, insertLine, prefix.length + 1);
+            
+            const newDecorations = [{
+                range: range,
+                options: { inlineClassName: decorationClass }
+            }];
+            
+            const addedIds = model.deltaDecorations([], newDecorations);
+            this.editorDecorations.push(...addedIds);
+        }
+
+        // 4. 自动滚动
+        if (this.elements.autoScroll.checked) {
+            this.editor.revealLine(model.getLineCount());
+        }
+    }
+
+    // ================= 数据流处理 =================
+
+    handleIncomingData(dataView) {
+        const isHex = this.elements.hexDisplay.checked;
+        const showTime = this.elements.showTimestamp.checked;
+        let chunk = '';
+        
+        if (isHex) {
+            const hexArr = [];
+            for(let i=0; i<dataView.length; i++) hexArr.push(dataView[i].toString(16).padStart(2, '0').toUpperCase());
+            chunk = hexArr.join(' ') + ' ';
+        } else {
+            chunk = this.textDecoder.decode(dataView, { stream: true });
+        }
+        
+        const currentBytes = parseInt(this.elements.byteCount.textContent) || 0;
+        this.elements.byteCount.textContent = currentBytes + dataView.byteLength;
+
+        let processedChunk = '';
+        const now = new Date();
+        const timeStr = `[${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}/${now.getMilliseconds().toString().padStart(3,'0')}] `;
+        
+        if (showTime) {
+            if (this.lastMsgEndsWithNewline) {
+                processedChunk += timeStr;
+                this.lastMsgEndsWithNewline = false;
+            }
+            if (chunk.includes('\n')) {
+                const parts = chunk.split('\n');
+                for (let i = 0; i < parts.length - 1; i++) parts[i+1] = timeStr + parts[i+1];
+                processedChunk += parts.join('\n');
+            } else {
+                processedChunk += chunk;
+            }
+            if (chunk.endsWith('\n') || chunk.endsWith('\r')) this.lastMsgEndsWithNewline = true;
+        } else {
+            processedChunk = chunk;
+        }
+
+        this.processBufferAndRender(processedChunk);
+    }
+    
+    processBufferAndRender(newText) {
+        let tempText = newText;
+        while(tempText.length > 0) {
+            const nlIdx = tempText.indexOf('\n');
+            if (nlIdx === -1) {
+                this.writeToMonaco(tempText); // 追加模式
+                break;
+            } else {
+                const linePart = tempText.slice(0, nlIdx + 1);
+                this.writeToMonaco(linePart);
+                tempText = tempText.slice(nlIdx + 1);
+            }
+        }
+    }
+    
+    writeToMonaco(text) {
+        if (!this.isMonacoReady) return;
+        const model = this.monacoModel;
+        
+        // 1. 写入文本
+        const lastLine = model.getLineCount();
+        const lastLen = model.getLineLength(lastLine);
+        model.applyEdits([{
+            range: new monaco.Range(lastLine, lastLen + 1, lastLine, lastLen + 1),
+            text: text
+        }]);
+        
+        // 2. 检查并添加 Delta
+        const currentLastLine = model.getLineCount();
+        this.checkAndAddDelta(currentLastLine);
+        
+        // 如果 text 里有换行，可能上一行也刚完成，需要检查
+        if (text.includes('\n')) {
+            this.checkAndAddDelta(currentLastLine - 1);
+        }
+        
+        if (this.elements.autoScroll.checked) {
+            this.editor.revealLine(currentLastLine);
+        }
+    }
+    
+    checkAndAddDelta(lineNumber) {
+        if (lineNumber < 1) return;
+        const model = this.monacoModel;
+        const lineContent = model.getLineContent(lineNumber);
+        
+        // 如果已经有 Delta 前缀（以 + 开头或空格开头且后面跟 [Time]），跳过
+        if (/^(\+\d+(\.\d+)?(m?s)| {7})\s*\[/.test(lineContent)) return;
+        
+        // 检查是否以 [Time] 开头
+        const timeMatch = lineContent.match(/^\[(\d{2}):(\d{2}):(\d{2})\/(\d{3})\]/);
+        if (timeMatch) {
+            // 这是一个新行，且还没有 Delta
+            const now = new Date();
+            now.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]), parseInt(timeMatch[3]), parseInt(timeMatch[4]));
+            const currentTime = now.getTime();
+            
+            let prefix = '       '; // 默认占位
+            let decorationClass = null;
+            
+            if (this.lastParsedTime !== null) {
+                const diff = currentTime - this.lastParsedTime;
+                // 简单的防抖：如果时间倒流（跨天或乱序），重置
+                if (diff >= 0 && diff < 3600000) { 
+                    if (diff >= 1000) prefix = `+${(diff/1000).toFixed(2)}s `;
+                    else prefix = `+${diff}ms `.padEnd(7, ' ');
+                    
+                    if (diff >= 2000) decorationClass = 'delta-2000';
+                    else if (diff >= 1000) decorationClass = 'delta-1000';
+                    else if (diff >= 300) decorationClass = 'delta-300';
+                    else if (diff >= 100) decorationClass = 'delta-100';
+                    else decorationClass = 'delta-normal';
+                }
+            }
+            this.lastParsedTime = currentTime;
+            
+            // 插入 Prefix
+            model.applyEdits([{
+                range: new monaco.Range(lineNumber, 1, lineNumber, 1),
+                text: prefix
+            }]);
+            
+            // 添加颜色
+            if (decorationClass) {
+                const newDeco = {
+                    range: new monaco.Range(lineNumber, 1, lineNumber, prefix.length + 1),
+                    options: { inlineClassName: decorationClass }
+                };
+                const addedIds = model.deltaDecorations([], [newDeco]);
+                this.editorDecorations.push(...addedIds);
+            }
+        }
+    }
+
+    // ================= 导入导出 =================
+
+    exportLog() {
+        if (!this.monacoModel) return;
+        const lineCount = this.monacoModel.getLineCount();
+        let content = '';
+        
+        // 遍历每一行，去除 Delta 前缀
+        for (let i = 1; i <= lineCount; i++) {
+            let line = this.monacoModel.getLineContent(i);
+            // 去除开头的 Delta (+xxxms 或 空格)
+            line = line.replace(/^[\s\+\d\.ms]+(?=\[)/, '');
+            content += line + (i < lineCount ? '\n' : ''); // 保持换行
+        }
+        
+        if (!content) { this.log('没有可导出的内容', 'warning'); return; }
+        
         try {
             const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
@@ -240,157 +508,163 @@ class SerialConsole {
         }
     }
 
-    // 导入日志
     importLog(event) {
         const file = event.target.files[0];
         if (!file) return;
-
         const reader = new FileReader();
         reader.onload = (e) => {
             const content = e.target.result;
-            this.elements.receiveArea.value = content;
+            this.clearReceive();
             
-            // 更新统计
+            // 模拟写入
+            const lines = content.split('\n');
+            
+            this.lastParsedTime = null;
+            
+            // 优化：构建带 Delta 的大字符串一次性 setValue
+            let fullTextWithDelta = '';
+            const newDecorations = [];
+            let currentLine = 1;
+            
+            lines.forEach((line, index) => {
+                let prefix = '       ';
+                let decoClass = null;
+                
+                const timeMatch = line.match(/^\[(\d{2}):(\d{2}):(\d{2})\/(\d{3})\]/);
+                if (timeMatch) {
+                    const now = new Date();
+                    now.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]), parseInt(timeMatch[3]), parseInt(timeMatch[4]));
+                    const t = now.getTime();
+                    
+                    if (this.lastParsedTime !== null) {
+                        const diff = t - this.lastParsedTime;
+                        if (diff >= 0 && diff < 3600000) {
+                            if (diff >= 1000) prefix = `+${(diff/1000).toFixed(2)}s `;
+                            else prefix = `+${diff}ms `.padEnd(7, ' ');
+                            
+                            if (diff >= 2000) decoClass = 'delta-2000';
+                            else if (diff >= 1000) decoClass = 'delta-1000';
+                            else if (diff >= 300) decoClass = 'delta-300';
+                            else if (diff >= 100) decoClass = 'delta-100';
+                            else decoClass = 'delta-normal';
+                        }
+                    }
+                    this.lastParsedTime = t;
+                }
+                
+                fullTextWithDelta += prefix + line + (index < lines.length - 1 ? '\n' : '');
+                
+                if (decoClass) {
+                    newDecorations.push({
+                        range: new monaco.Range(currentLine, 1, currentLine, prefix.length + 1),
+                        options: { inlineClassName: decoClass }
+                    });
+                }
+                currentLine++;
+            });
+            
+            this.monacoModel.setValue(fullTextWithDelta);
+            const addedIds = this.monacoModel.deltaDecorations([], newDecorations);
+            this.editorDecorations.push(...addedIds);
+            
             this.elements.byteCount.textContent = new TextEncoder().encode(content).length;
-            this.elements.lineCount.textContent = content.split('\n').length;
-            
             this.log(`已加载文件: ${file.name}`, 'success');
-            // 重置input以允许重复选择同一文件
-            this.elements.fileInput.value = '';
-        };
-        reader.onerror = () => {
-            this.log('读取文件失败', 'error');
             this.elements.fileInput.value = '';
         };
         reader.readAsText(file);
     }
 
-    // 请求用户授权新设备 (必须由用户手势触发)
+    // ================= 标准串口功能 =================
+    
+    clearReceive() {
+        if (this.monacoModel) {
+            this.monacoModel.setValue('');
+            // 清除所有装饰器
+            this.monacoModel.deltaDecorations(this.editorDecorations, []);
+            this.editorDecorations = [];
+        }
+        this.elements.byteCount.textContent = '0';
+        this.lastParsedTime = null;
+    }
+
     async requestNewPort() {
         try {
-            if (!navigator.serial) {
-                throw new Error('浏览器不支持 Web Serial API');
-            }
+            if (!navigator.serial) throw new Error('浏览器不支持 Web Serial API');
             const port = await navigator.serial.requestPort();
             if (port) {
                 this.log('设备授权成功');
                 await this.refreshPorts();
-                // 自动选中刚添加的设备
                 const ports = await navigator.serial.getPorts();
                 this.elements.portSelect.value = ports.indexOf(port);
             }
         } catch (error) {
-            if (error.name !== 'NotFoundError') { // 用户取消不报错
-                this.log(`请求设备失败: ${error.message}`, 'error');
-            }
+            if (error.name !== 'NotFoundError') this.log(`请求设备失败: ${error.message}`, 'error');
         }
     }
     
-    // 刷新已授权端口列表
     async refreshPorts() {
         try {
             if (!navigator.serial) return;
-            
             const ports = await navigator.serial.getPorts();
             const currentVal = this.elements.portSelect.value;
-            
             this.elements.portSelect.innerHTML = '<option value="">-- 选择端口 --</option>';
-            
             if (ports.length === 0) {
                 this.elements.portSelect.innerHTML += '<option value="" disabled>无授权设备 (请点击"选择设备")</option>';
             } else {
                 ports.forEach((port, index) => {
                     const info = port.getInfo();
-                    const label = info.usbProductId ? 
-                        `USB设备 (PID:${info.usbProductId.toString(16).toUpperCase()})` : 
-                        `串口设备 ${index + 1}`;
-                    
+                    const label = info.usbProductId ? `USB设备 (PID:${info.usbProductId.toString(16).toUpperCase()})` : `串口设备 ${index + 1}`;
                     const option = document.createElement('option');
                     option.value = index;
                     option.textContent = label;
                     this.elements.portSelect.appendChild(option);
                 });
             }
-            
-            // 尝试保持之前的选择
-            if (currentVal !== '' && currentVal < ports.length) {
-                this.elements.portSelect.value = currentVal;
-            }
+            if (currentVal !== '' && currentVal < ports.length) this.elements.portSelect.value = currentVal;
         } catch (error) {
             this.log(`刷新列表失败: ${error.message}`, 'error');
         }
     }
     
-    // 连接
     async connect() {
         const portIndex = this.elements.portSelect.value;
-        if (portIndex === '') {
-            this.log('请先选择串口设备', 'warning');
-            return;
-        }
-        
+        if (portIndex === '') { this.log('请先选择串口设备', 'warning'); return; }
         try {
             const ports = await navigator.serial.getPorts();
             this.port = ports[portIndex];
-            
             await this.port.open({
                 baudRate: this.config.baudRate,
                 dataBits: this.config.dataBits,
                 stopBits: this.config.stopBits,
                 parity: this.config.parity,
-                bufferSize: 8192 // 增加缓冲区
+                bufferSize: 8192
             });
-            
             this.isConnected = true;
             this.keepReading = true;
-            this.lastMsgEndsWithNewline = true; // 重置换行状态
+            this.lastMsgEndsWithNewline = true;
+            this.lastParsedTime = null; 
             this.updateConnectionStatus();
             this.log(`已连接 (波特率: ${this.config.baudRate})`, 'success');
-            
-            // 启动读取循环
             this.readLoop();
-            
         } catch (error) {
             this.log(`连接失败: ${error.message}`, 'error');
             this.disconnect();
         }
     }
     
-    // 断开
     async disconnect() {
-        this.keepReading = false; // 信号停止读取循环
-        
-        if (this.reader) {
-            try {
-                await this.reader.cancel();
-                // 注意：reader.closed 的 promise 可能会在循环结束后才 resolve
-            } catch (e) { /* ignore */ }
-        }
-        
-        if (this.writer) {
-            try {
-                await this.writer.close();
-            } catch (e) { /* ignore */ }
-        }
-        
-        if (this.port) {
-            try {
-                await this.port.close();
-            } catch (e) { 
-                console.error(e);
-            }
-        }
-        
+        this.keepReading = false;
+        if (this.reader) try { await this.reader.cancel(); } catch (e) {}
+        if (this.writer) try { await this.writer.close(); } catch (e) {}
+        if (this.port) try { await this.port.close(); } catch (e) { console.error(e); }
         this.isConnected = false;
         this.port = null;
         this.reader = null;
         this.writer = null;
-        
         this.updateConnectionStatus();
         this.log('已断开连接', 'warning');
     }
     
-    // 核心读取循环 (修复了二进制处理和流式解码)
     async readLoop() {
         while (this.port.readable && this.keepReading) {
             this.reader = this.port.readable.getReader();
@@ -398,9 +672,7 @@ class SerialConsole {
                 while (true) {
                     const { value, done } = await this.reader.read();
                     if (done) break;
-                    if (value) {
-                        this.handleIncomingData(value);
-                    }
+                    if (value) this.handleIncomingData(value);
                 }
             } catch (error) {
                 if (this.keepReading) this.log(`读取错误: ${error.message}`, 'error');
@@ -410,132 +682,42 @@ class SerialConsole {
         }
     }
     
-    // 处理接收到的原始数据
-    handleIncomingData(dataView) {
-        // dataView 是 Uint8Array
-        const isHex = this.elements.hexDisplay.checked;
-        const showTime = this.elements.showTimestamp.checked;
-        let displayStr = '';
-        
-        if (isHex) {
-            // Hex 模式：直接转换原始字节
-            const hexArr = [];
-            for(let i=0; i<dataView.length; i++) {
-                hexArr.push(dataView[i].toString(16).padStart(2, '0').toUpperCase());
-            }
-            displayStr = hexArr.join(' ') + ' ';
-        } else {
-            // 文本模式：使用流式解码处理多字节字符（中文）
-            displayStr = this.textDecoder.decode(dataView, { stream: true });
-        }
-        
-        if (showTime && displayStr.length > 0) {
-            // 构造时间戳字符串 HH:MM:SS/毫秒
-            const now = new Date();
-            const h = now.getHours().toString().padStart(2, '0');
-            const m = now.getMinutes().toString().padStart(2, '0');
-            const s = now.getSeconds().toString().padStart(2, '0');
-            const ms = now.getMilliseconds().toString().padStart(3, '0');
-            const timeStr = `[${h}:${m}:${s}/${ms}] `;
-
-            // 智能添加时间戳：
-            // 1. 如果上一段数据以换行结束，则在当前数据开头添加
-            // 2. 如果当前数据中间包含换行，则在换行后添加（可选，这里简单处理仅在开头加）
-            if (this.lastMsgEndsWithNewline) {
-                displayStr = timeStr + displayStr;
-            }
-            
-            // 更新状态，判断本次数据是否以换行结尾
-            // 检查 \n 或 \r
-            this.lastMsgEndsWithNewline = /[\\r\\n]$/.test(displayStr);
-            
-            // 如果需要在每行中间也加时间戳（处理一次收到多行的情况），可以使用 replace
-            // displayStr = displayStr.replace(/(\\r\\n|\\n|\\r)/g, `$1${timeStr}`);
-        }
-
-        this.appendToReceiveArea(displayStr);
-        
-        // 更新统计
-        const currentBytes = parseInt(this.elements.byteCount.textContent) || 0;
-        this.elements.byteCount.textContent = currentBytes + dataView.byteLength;
-    }
-    
-    appendToReceiveArea(text) {
-        const area = this.elements.receiveArea;
-        const autoScroll = this.elements.autoScroll.checked;
-        
-        // 智能滚动：如果当前不在底部，就不强制滚动
-        const isAtBottom = area.scrollHeight - area.scrollTop - area.clientHeight < 50;
-        
-        area.value += text;
-        
-        // 更新行数
-        this.elements.lineCount.textContent = area.value.split('\n').length;
-        
-        if (autoScroll && isAtBottom) {
-            area.scrollTop = area.scrollHeight;
-        }
-    }
-    
-    // 发送数据
     async sendData() {
         if (!this.port || !this.port.writable) return;
-        
         const rawInput = this.elements.sendArea.value;
         if (!rawInput) return;
-        
         try {
             const isHex = this.elements.hexSend.checked;
             const appendNL = this.elements.appendNewline.checked;
             let dataToSend;
-            
             if (isHex) {
-                // 过滤非Hex字符
                 const cleanHex = rawInput.replace(/[^0-9a-fA-F]/g, '');
-                if (cleanHex.length % 2 !== 0) {
-                    this.log('Hex长度必须是偶数', 'warning');
-                    return;
-                }
+                if (cleanHex.length % 2 !== 0) { this.log('Hex长度必须是偶数', 'warning'); return; }
                 const bytes = new Uint8Array(cleanHex.length / 2);
-                for (let i = 0; i < cleanHex.length; i += 2) {
-                    bytes[i / 2] = parseInt(cleanHex.substr(i, 2), 16);
-                }
+                for (let i = 0; i < cleanHex.length; i += 2) bytes[i / 2] = parseInt(cleanHex.substr(i, 2), 16);
                 dataToSend = bytes;
             } else {
                 let text = rawInput;
-                if (appendNL) text += '\r\n'; // 标准串口换行通常是 CRLF
+                if (appendNL) text += '\r\n';
                 dataToSend = new TextEncoder().encode(text);
             }
-            
             const writer = this.port.writable.getWriter();
             await writer.write(dataToSend);
             writer.releaseLock();
-            
             this.log(`已发送 ${dataToSend.byteLength} 字节`);
-            
-            // 处理循环发送
-            // 注意：此处简化逻辑，实际循环发送建议使用 setInterval 并在外部控制
-            
         } catch (error) {
             this.log(`发送失败: ${error.message}`, 'error');
         }
     }
     
-    clearReceive() {
-        this.elements.receiveArea.value = '';
-        this.elements.byteCount.textContent = '0';
-        this.elements.lineCount.textContent = '0';
-    }
-    
     updateConnectionStatus() {
         const isConnected = this.isConnected;
         const color = isConnected ? '#4CAF50' : '#F44336';
-        const text = isConnected ? '已连接' : '未连接';
-        
-        this.elements.statusIndicator.style.color = color;
-        this.elements.statusText.textContent = text;
-        this.elements.statusText.style.color = color;
-        
+        if (this.elements.statusIndicator) this.elements.statusIndicator.style.color = color;
+        if (this.elements.statusText) {
+            this.elements.statusText.textContent = isConnected ? '已连接' : '未连接';
+            this.elements.statusText.style.color = color;
+        }
         this.elements.connectBtn.disabled = isConnected;
         this.elements.disconnectBtn.disabled = !isConnected;
         this.elements.sendBtn.disabled = !isConnected;
@@ -545,64 +727,40 @@ class SerialConsole {
     }
     
     updateSendButton() {
-        const hasContent = this.elements.sendArea.value.length > 0;
-        this.elements.sendBtn.disabled = !this.isConnected || !hasContent;
+        this.elements.sendBtn.disabled = !this.isConnected || this.elements.sendArea.value.length === 0;
     }
     
     log(msg, type = 'info') {
         const timestamp = new Date().toLocaleTimeString();
         const formattedMsg = `[${timestamp}] ${msg}`;
-        
-        switch(type) {
-            case 'error':
-                console.error(formattedMsg);
-                break;
-            case 'warning':
-                console.warn(formattedMsg);
-                break;
-            case 'success':
-                console.info(formattedMsg);
-                break;
-            default:
-                console.info(formattedMsg);
-        }
+        console.log(formattedMsg); 
     }
 }
 
-// 注册应用到桌面系统
 if (typeof DesktopSystem !== 'undefined') {
     DesktopSystem.registerApp({
         id: 'serial',
         title: '串口调试助手',
         icon: '🔌',
-        width: '850px',
-        height: '700px',
+        width: '900px',
+        height: '750px',
         content: (instanceId) => {
-            setTimeout(() => {
-                new SerialConsole(`serial-app-${instanceId}`);
-            }, 0);
+            setTimeout(() => { new SerialConsole(`serial-app-${instanceId}`); }, 0);
             return `<div id="serial-app-${instanceId}" style="height:100%"></div>`;
         }
     });
 }
 
-// 注入样式 (防止重复注入)
 if (!document.getElementById('serial-console-style')) {
     const style = document.createElement('style');
     style.id = 'serial-console-style';
     style.textContent = `
     .serial-console { display: flex; flex-direction: column; height: 100%; padding: 10px; box-sizing: border-box; background: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    .connection-status { font-size: 13px; font-weight: 500; }
-    
     .serial-controls { background: #fff; padding: 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 8px; }
     .config-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .config-item { display: flex; flex-direction: column; gap: 2px; }
     .config-item label { font-size: 10px; color: #666; font-weight: 500; text-align: center; }
     .config-item select, .config-item input { padding: 3px 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px; min-width: 80px; }
-    .config-item input[type="number"]::-webkit-inner-spin-button, 
-    .config-item input[type="number"]::-webkit-outer-spin-button { 
-        opacity: 1; margin: 0; height: auto; 
-    }
     .config-item .btn { padding: 4px 8px; font-size: 11px; white-space: nowrap; }
     
     .serial-main { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
@@ -613,19 +771,23 @@ if (!document.getElementById('serial-console-style')) {
     .receive-header, .send-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
     h4 { margin: 0; font-size: 13px; color: #444; display: flex; align-items: center; }
     .subtitle { font-weight: normal; color: #999; font-size: 11px; margin-left: 6px; }
-    
     .receive-options, .send-options { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #555; }
     .receive-options label, .send-options label { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
     .receive-info { font-size: 11px; color: #888; margin-left: auto; padding-left: 12px; }
     
+    .receive-window { flex: 1; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; }
+    
+    /* Delta Colors for Monaco */
+    .delta-normal { color: #999; }
+    .delta-100 { color: #2196F3 !important; font-weight: bold; }
+    .delta-300 { color: #FF9800 !important; font-weight: bold; }
+    .delta-1000 { color: #F44336 !important; font-weight: bold; }
+    .delta-2000 { color: #9C27B0 !important; font-weight: bold; background: rgba(156, 39, 176, 0.1); }
+    
     textarea { flex: 1; resize: none; border: 1px solid #ddd; border-radius: 4px; padding: 8px; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.4; outline: none; }
     textarea:focus { border-color: #2196F3; }
-    .receive-section textarea { background-color: #fafafa; color: #222; }
     
     .send-controls { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
-    
-
-    
     .btn { padding: 5px 12px; border: 1px solid transparent; border-radius: 4px; font-size: 12px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(100%); }
     .btn.primary { background: #2196F3; color: white; }
