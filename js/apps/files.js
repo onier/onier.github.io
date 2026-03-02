@@ -281,6 +281,11 @@ const FileExplorerApp = {
                     }
                 });
 
+                // 添加快捷键 Ctrl+E 导出指定行
+                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE, () => {
+                    this.showExportDialog(instanceId, editor, fileHandle.name);
+                });
+
             } catch (e) {
                 console.error(e);
                 container.innerHTML = `<div style="color:red;padding:20px;">无法读取文件: ${e.message}</div>`;
@@ -435,6 +440,260 @@ const FileExplorerApp = {
 
     // --- 终端逻辑 ---
 
+    // --- 导出指定行范围功能 ---
+
+    exportCurrentFile(instanceId) {
+        const state = this.state[instanceId];
+        if (!state) return;
+
+        // 获取当前活动标签
+        const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+        if (!activeTab || activeTab.type !== 'editor') {
+            alert('请先打开一个文件');
+            return;
+        }
+
+        if (!activeTab.editorInstance) {
+            alert('编辑器正在加载中，请稍后再试');
+            return;
+        }
+
+        this.showExportDialog(instanceId, activeTab.editorInstance, activeTab.name);
+    },
+
+    showExportDialog(instanceId, editor, fileName) {
+        // 检查是否已有对话框
+        const existingDialog = document.getElementById(`export-dialog-${instanceId}`);
+        if (existingDialog) existingDialog.remove();
+
+        const lineCount = editor.getModel().getLineCount();
+        
+        // 创建对话框
+        const dialog = document.createElement('div');
+        dialog.id = `export-dialog-${instanceId}`;
+        dialog.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(30, 30, 35, 0.95);
+            border: 1px solid rgba(100, 200, 255, 0.3);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 0 20px rgba(0, 150, 255, 0.3);
+            z-index: 1000;
+            min-width: 320px;
+            backdrop-filter: blur(10px);
+        `;
+
+        dialog.innerHTML = `
+            <div style="color: #00f0ff; font-size: 14px; font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <span>📤 导出日志行范围</span>
+                <span style="cursor: pointer; color: #999; font-size: 18px;" onclick="this.closest('.export-dialog').remove()">&times;</span>
+            </div>
+            <div style="color: #aaa; font-size: 12px; margin-bottom: 10px;">
+                文件共 ${lineCount} 行 | 快捷键: Ctrl+E
+            </div>
+            <div style="margin-bottom: 15px;">
+                <div style="margin-bottom: 8px;">
+                    <label style="color: #ccc; font-size: 12px;">起始行号:</label>
+                    <input type="number" id="export-start-${instanceId}" min="1" max="${lineCount}" value="1"
+                        style="width: 100%; padding: 8px; margin-top: 4px; background: rgba(0,0,0,0.5); border: 1px solid #444; color: #fff; border-radius: 4px; font-size: 13px; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="color: #ccc; font-size: 12px;">结束行号:</label>
+                    <input type="number" id="export-end-${instanceId}" min="1" max="${lineCount}" value="${lineCount}"
+                        style="width: 100%; padding: 8px; margin-top: 4px; background: rgba(0,0,0,0.5); border: 1px solid #444; color: #fff; border-radius: 4px; font-size: 13px; box-sizing: border-box;">
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="export-btn-${instanceId}" style="flex: 1; padding: 8px; background: linear-gradient(135deg, #007acc, #005a9e); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                    导出
+                </button>
+                <button onclick="document.getElementById('export-dialog-${instanceId}').remove()" style="padding: 8px 15px; background: #444; color: #ccc; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                    取消
+                </button>
+            </div>
+            <div id="export-error-${instanceId}" style="color: #ff6b6b; font-size: 11px; margin-top: 10px; display: none;"></div>
+        `;
+
+        // 添加类名便于选择器
+        dialog.className = 'export-dialog';
+
+        // 添加到编辑器容器
+        const container = editor.getDomNode();
+        if (container) {
+            container.style.position = 'relative';
+            container.appendChild(dialog);
+        }
+
+        // 绑定导出按钮事件
+        const exportBtn = document.getElementById(`export-btn-${instanceId}`);
+        exportBtn.onclick = () => {
+            const startInput = document.getElementById(`export-start-${instanceId}`);
+            const endInput = document.getElementById(`export-end-${instanceId}`);
+            const errorDiv = document.getElementById(`export-error-${instanceId}`);
+
+            const startLine = parseInt(startInput.value, 10);
+            const endLine = parseInt(endInput.value, 10);
+
+            // 验证输入
+            if (isNaN(startLine) || isNaN(endLine)) {
+                errorDiv.textContent = '请输入有效的行号';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (startLine < 1 || endLine < 1) {
+                errorDiv.textContent = '行号必须大于等于 1';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (startLine > lineCount || endLine > lineCount) {
+                errorDiv.textContent = `行号不能超过最大行数 ${lineCount}`;
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (startLine > endLine) {
+                errorDiv.textContent = '起始行号不能大于结束行号';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            // 执行导出
+            this.exportLines(editor, fileName, startLine, endLine);
+            dialog.remove();
+        };
+
+        // 自动聚焦到起始行输入框
+        setTimeout(() => {
+            const startInput = document.getElementById(`export-start-${instanceId}`);
+            if (startInput) {
+                startInput.focus();
+                startInput.select();
+            }
+        }, 50);
+
+        // 回车键提交
+        dialog.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                exportBtn.click();
+            }
+        });
+    },
+
+    exportLines(editor, fileName, startLine, endLine) {
+        try {
+            const model = editor.getModel();
+            let content = '';
+
+            // 获取指定范围的行内容
+            for (let i = startLine; i <= endLine; i++) {
+                content += model.getLineContent(i);
+                if (i < endLine) {
+                    content += '\n';
+                }
+            }
+
+            // 生成标题
+            const baseName = fileName.replace(/\.[^/.]+$/, '');
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+            const title = `${baseName}_lines${startLine}-${endLine}_${timestamp}`;
+
+            // 在新页面中打开内容
+            const newWindow = window.open('', '_blank');
+            if (newWindow) {
+                newWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html lang="zh-CN">
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <title>${title}</title>
+                        <style>
+                            * { margin: 0; padding: 0; box-sizing: border-box; }
+                            body {
+                                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                                background: #1e1e1e;
+                                color: #d4d4d4;
+                                padding: 20px;
+                                line-height: 1.6;
+                            }
+                            .header {
+                                position: fixed;
+                                top: 0;
+                                left: 0;
+                                right: 0;
+                                background: #252526;
+                                border-bottom: 1px solid #333;
+                                padding: 10px 20px;
+                                display: flex;
+                                justify-content: space-between;
+                                align-items: center;
+                                z-index: 100;
+                            }
+                            .header h1 {
+                                font-size: 14px;
+                                color: #00f0ff;
+                                font-weight: normal;
+                            }
+                            .header .info {
+                                font-size: 12px;
+                                color: #888;
+                            }
+                            .content {
+                                margin-top: 50px;
+                                white-space: pre-wrap;
+                                word-wrap: break-word;
+                                font-size: 13px;
+                            }
+                            .line-number {
+                                color: #858585;
+                                display: inline-block;
+                                width: 50px;
+                                text-align: right;
+                                padding-right: 15px;
+                                user-select: none;
+                            }
+                            .line-content {
+                                color: #d4d4d4;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="header">
+                            <h1>📄 ${fileName} (第 ${startLine} 行 - 第 ${endLine} 行)</h1>
+                            <span class="info">共 ${endLine - startLine + 1} 行 | ${timestamp}</span>
+                        </div>
+                        <div class="content"></div>
+                        <script>
+                            const lines = ${JSON.stringify(content.split('\n'))};
+                            const startLine = ${startLine};
+                            const contentDiv = document.querySelector('.content');
+                            lines.forEach((line, index) => {
+                                const lineNum = startLine + index;
+                                const lineDiv = document.createElement('div');
+                                lineDiv.innerHTML = '<span class="line-number">' + lineNum + '</span><span class="line-content">' + 
+                                    line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+                                contentDiv.appendChild(lineDiv);
+                            });
+                        <\/script>
+                    </body>
+                    </html>
+                `);
+                newWindow.document.close();
+                console.log(`已在新页面打开 ${fileName} 的第 ${startLine} 行到第 ${endLine} 行`);
+            } else {
+                alert('无法打开新窗口，请检查浏览器是否阻止了弹出窗口');
+            }
+        } catch (e) {
+            console.error('导出失败:', e);
+            alert('导出失败: ' + e.message);
+        }
+    },
+
     toggleTerminal(instanceId) {
         const panel = document.getElementById(`fm-term-panel-${instanceId}`);
         const body = document.getElementById(`fm-term-body-${instanceId}`);
@@ -477,7 +736,8 @@ DesktopSystem.registerApp({
                 <!-- 工具栏 -->
                 <div class="fm-toolbar">
                     <button onclick="FileExplorerApp.openRoot('${instanceId}')">📂 打开根目录</button>
-                    <button onclick="FileExplorerApp.toggleTerminal('${instanceId}')" style="margin-left:auto;">💻 终端</button>
+                    <button onclick="FileExplorerApp.exportCurrentFile('${instanceId}')" style="margin-left: auto; margin-right: 10px;">📤 导出日志</button>
+                    <button onclick="FileExplorerApp.toggleTerminal('${instanceId}')">💻 终端</button>
                 </div>
 
                 <!-- 主体 -->

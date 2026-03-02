@@ -116,6 +116,13 @@ class VditorEditor {
                             <button class="vd-btn icon-only" id="saveAs-${id}" title="另存为">${ICONS.saveAs}</button>
                             <div class="vd-divider"></div>
                             <button class="vd-btn icon-only" id="export-${id}" title="导出 HTML">${ICONS.export}</button>
+                            <div class="vd-divider"></div>
+                            <span style="font-size: 12px; color: #64748b;">行:</span>
+                            <input type="number" id="export-start-${id}" placeholder="起" style="width: 45px; padding: 4px 6px; font-size: 12px; border: 1px solid var(--vd-border); border-radius: 4px; outline: none;">
+                            <span style="color: #94a3b8;">-</span>
+                            <input type="number" id="export-end-${id}" placeholder="止" style="width: 45px; padding: 4px 6px; font-size: 12px; border: 1px solid var(--vd-border); border-radius: 4px; outline: none;">
+                            <button class="vd-btn" id="export-lines-${id}" title="导出行范围">📤 导出</button>
+                            <button class="vd-btn icon-only" id="get-selection-${id}" title="获取选中行">✅</button>
                         </div>
                     </div>
                 </div>
@@ -148,6 +155,10 @@ class VditorEditor {
             selectMode: document.getElementById(`mode-${id}`),
             wordCount: document.getElementById(`word-${id}`),
             lineCount: document.getElementById(`line-${id}`),
+            exportStart: document.getElementById(`export-start-${id}`),
+            exportEnd: document.getElementById(`export-end-${id}`),
+            btnExportLines: document.getElementById(`export-lines-${id}`),
+            btnGetSelection: document.getElementById(`get-selection-${id}`),
         };
     }
 
@@ -199,6 +210,8 @@ class VditorEditor {
         d.btnSaveAs.onclick = () => this.saveAs();
         d.btnExport.onclick = () => this.exportHtml();
         d.btnHelp.onclick = () => this.insertHelp();
+        d.btnExportLines.onclick = () => this.exportLines();
+        d.btnGetSelection.onclick = () => this.getSelectionLines();
         
         d.selectMode.onchange = (e) => {
             if(this.editor) this.editor.setMode(e.target.value);
@@ -334,6 +347,176 @@ class VditorEditor {
         if (!this.editor) return;
         const helpText = `\n# Vditor 使用帮助\n\n- **快捷键**: Ctrl+S 保存, Ctrl+O 打开\n- **公式**: $E=mc^2$\n`;
         this.editor.insertValue(helpText);
+    }
+
+    // 获取当前选中的行号范围
+    getSelectionLines() {
+        if (!this.editor) return;
+        
+        const textarea = this.container.querySelector('.vditor-ir__textarea, .vditor-sv__textarea');
+        if (!textarea) {
+            alert('无法获取编辑器内容');
+            return;
+        }
+
+        const content = this.editor.getValue();
+        const lines = content.split('\n');
+        
+        // 计算选中区域的行号
+        const selectionStart = textarea.selectionStart;
+        const selectionEnd = textarea.selectionEnd;
+        
+        let startLine = 1;
+        let currentPos = 0;
+        
+        for (let i = 0; i < lines.length; i++) {
+            const lineEnd = currentPos + lines[i].length + 1; // +1 for newline
+            if (currentPos <= selectionStart && selectionStart < lineEnd) {
+                startLine = i + 1;
+            }
+            if (currentPos <= selectionEnd && selectionEnd <= lineEnd) {
+                const endLine = i + 1;
+                this.dom.exportStart.value = startLine;
+                this.dom.exportEnd.value = endLine;
+                this.updateStatus(`已选择: 第${startLine}行 到 第${endLine}行`, 'success');
+                return;
+            }
+            currentPos = lineEnd;
+        }
+        
+        // 如果没有选中内容，使用光标所在行
+        const cursorPos = textarea.selectionStart;
+        currentPos = 0;
+        for (let i = 0; i < lines.length; i++) {
+            const lineEnd = currentPos + lines[i].length + 1;
+            if (currentPos <= cursorPos && cursorPos < lineEnd) {
+                this.dom.exportStart.value = i + 1;
+                this.dom.exportEnd.value = i + 1;
+                this.updateStatus(`已定位: 第${i + 1}行`, 'info');
+                return;
+            }
+            currentPos = lineEnd;
+        }
+    }
+
+    // 导出指定行范围的内容
+    async exportLines() {
+        if (!this.editor) return;
+
+        let startLine = parseInt(this.dom.exportStart.value);
+        let endLine = parseInt(this.dom.exportEnd.value);
+
+        if (isNaN(startLine) || isNaN(endLine)) {
+            alert('请输入有效的起始行和结束行号');
+            return;
+        }
+
+        const content = this.editor.getValue();
+        const lines = content.split('\n');
+        const totalLines = lines.length;
+
+        // 验证行号范围
+        if (startLine < 1) startLine = 1;
+        if (endLine > totalLines) endLine = totalLines;
+        if (startLine > endLine) {
+            alert('起始行必须小于等于结束行');
+            return;
+        }
+
+        // 高亮显示选中的行（通过添加临时样格）
+        this.highlightLines(startLine, endLine);
+
+        // 获取指定范围的内容
+        const selectedLines = lines.slice(startLine - 1, endLine);
+        const selectedContent = selectedLines.join('\n');
+
+        // 析取 log 语句
+        const logs = [];
+        for (let i = startLine; i <= endLine; i++) {
+            const lineContent = lines[i - 1].trim();
+            const logMatch = lineContent.match(/console\.(log|warn|error|info|debug)\s*\((.*)\)/);
+            if (logMatch) {
+                logs.push({
+                    line: i,
+                    type: logMatch[1],
+                    content: lineContent
+                });
+            }
+        }
+
+        // 构建导出内容
+        let exportContent = `<!-- 导出范围: 第 ${startLine} 行 到第 ${endLine} 行 -->\n`;
+        exportContent += `<!-- 文件: ${this.dom.fileName.textContent} -->\n`;
+        exportContent += `<!-- 导出时间: ${new Date().toLocaleString()} -->\n`;
+        exportContent += `\n<!-- === 原始内容 === -->\n\n`;
+        exportContent += selectedContent;
+        exportContent += `\n\n<!-- === 提取的 Log 语句 (${logs.length} 条) === -->\n`;
+        if (logs.length > 0) {
+            logs.forEach(log => {
+                exportContent += `<!-- 第 ${log.line} 行 [${log.type}]: ${log.content} -->\n`;
+            });
+        } else {
+            exportContent += `<!-- 未发现 log 语句 -->\n`;
+        }
+
+        // 保存文件
+        try {
+            const exportHandle = await window.showSaveFilePicker({
+                suggestedName: `export_lines_${startLine}-${endLine}.md`,
+                types: [{
+                    description: 'Markdown/Text Files',
+                    accept: { 'text/plain': ['.md', '.txt', '.log'] }
+                }]
+            });
+
+            const writable = await exportHandle.createWritable();
+            await writable.write(exportContent);
+            await writable.close();
+
+            this.updateStatus(`已导出第${startLine}-${endLine}行`, 'success');
+
+            // 3 秒后移除高亮
+            setTimeout(() => this.removeHighlight(), 3000);
+
+        } catch (e) {
+            if (e.name !== 'AbortError') {
+                alert('导出失败: ' + e.message);
+            }
+            this.removeHighlight();
+        }
+    }
+
+    // 高亮指定行
+    highlightLines(startLine, endLine) {
+        // 移除旧的高亮
+        this.removeHighlight();
+        
+        // 添加高亮样式
+        const textarea = this.container.querySelector('.vditor-ir__textarea, .vditor-sv__textarea');
+        if (!textarea) return;
+
+        const style = document.createElement('style');
+        style.id = 'vditor-line-highlight';
+        style.textContent = `
+            .vditor-line-highlight-${startLine}-${endLine} {
+                background: linear-gradient(to bottom, 
+                    transparent 0%, 
+                    rgba(99, 102, 241, 0.2) 0%, 
+                    rgba(99, 102, 241, 0.2) 100%, 
+                    transparent 100%
+                ) !important;
+            }
+        `;
+        document.head.appendChild(style);
+        this.highlightStyle = style;
+    }
+
+    // 移除高亮
+    removeHighlight() {
+        if (this.highlightStyle) {
+            this.highlightStyle.remove();
+            this.highlightStyle = null;
+        }
     }
 }
 
