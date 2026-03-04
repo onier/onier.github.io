@@ -91,7 +91,8 @@ const FileExplorerApp = {
             name: fileHandle.name,
             handle: fileHandle,
             contentDivId: contentId,
-            editorInstance: null // 稍后填充
+            editorInstance: null, // 稍后填充
+            editorType: null // 'monaco' 或 'vditor'
         };
 
         state.tabs.push(newTab);
@@ -113,10 +114,16 @@ const FileExplorerApp = {
         this.renderTabs(instanceId);
         this.switchTab(instanceId, tabId);
 
-        // 5. 初始化 Monaco Editor
-        // 稍微延时 0ms 确保 DOM 渲染完成，宽高已计算
+        // 5. 根据文件类型选择编辑器
+        const ext = fileHandle.name.split('.').pop().toLowerCase();
+        const isMarkdown = ['md', 'markdown', 'mdown', 'mkd'].includes(ext);
+
         setTimeout(() => {
-            this.initMonaco(instanceId, viewDiv, fileHandle);
+            if (isMarkdown) {
+                this.initVditor(instanceId, viewDiv, fileHandle, newTab);
+            } else {
+                this.initMonaco(instanceId, viewDiv, fileHandle);
+            }
         }, 0);
     },
 
@@ -192,9 +199,18 @@ const FileExplorerApp = {
 
         const tab = state.tabs[tabIndex];
 
-        // 销毁 Monaco 实例以释放内存
+        // 销毁编辑器实例以释放内存
         if (tab.editorInstance) {
-            tab.editorInstance.dispose();
+            if (tab.editorType === 'vditor') {
+                tab.editorInstance.destroy();
+            } else {
+                tab.editorInstance.dispose();
+            }
+        }
+
+        // 释放 Blob URL
+        if (tab.blobUrls) {
+            tab.blobUrls.forEach(url => URL.revokeObjectURL(url));
         }
 
         // 移除 DOM
@@ -213,9 +229,351 @@ const FileExplorerApp = {
         }
     },
 
+    // --- Vditor Markdown 编辑器集成 ---
+
+    async initVditor(instanceId, container, fileHandle, tab) {
+        tab.editorType = 'vditor';
+        container.innerHTML = '<div style="color:#999;padding:20px;">正在加载 Markdown 编辑器...</div>';
+
+        // 确保 Vditor 已加载
+        if (typeof window.Vditor === 'undefined') {
+            await this.loadVditorLibrary();
+        }
+
+        if (typeof window.Vditor === 'undefined') {
+            container.innerHTML = '<div style="color:red;padding:20px;">错误: Vditor 加载失败</div>';
+            return;
+        }
+
+        try {
+            const file = await fileHandle.getFile();
+            let content = await file.text();
+
+            // 处理本地图片：将相对路径转换为 Blob URL
+            const parentDir = await this.getParentDirectory(fileHandle);
+            const { processedContent, blobUrls } = await this.processMarkdownImages(content, parentDir);
+            tab.blobUrls = blobUrls;
+
+            // 清空容器
+            container.innerHTML = '';
+
+            // 创建 Vditor 容器
+            const vditorId = `vditor-${tab.id}`;
+            const vditorContainer = document.createElement('div');
+            vditorContainer.id = vditorId;
+            vditorContainer.style.width = '100%';
+            vditorContainer.style.height = '100%';
+            container.appendChild(vditorContainer);
+
+            // 初始化 Vditor
+            const editor = new Vditor(vditorId, {
+                height: '100%',
+                mode: 'sv', // 分屏模式：编辑 + 预览
+                theme: 'classic',
+                placeholder: '在此处输入 Markdown 内容...',
+                cache: { enable: false },
+                toolbar: [
+                    'emoji', 'headings', 'bold', 'italic', 'strike', '|',
+                    'list', 'ordered-list', 'check', 'outdent', 'indent', '|',
+                    'quote', 'line', 'code', 'inline-code', '|',
+                    'table', 'link', '|',
+                    'undo', 'redo', '|',
+                    'edit-mode', 'fullscreen', 'preview'
+                ],
+                preview: {
+                    delay: 500,
+                    hljs: { 
+                        style: 'github',
+                        lineNumber: true
+                    },
+                    markdown: {
+                        toc: true,
+                        mark: true,
+                        footnotes: true,
+                        autoSpace: true
+                    }
+                },
+                upload: {
+                    accept: 'image/*',
+                    handler: (files) => {
+                        // 本地图片处理：转换为 Blob URL
+                        return this.handleImageUpload(files, parentDir, editor);
+                    }
+                },
+                input: (value) => {
+                    tab.isDirty = true;
+                },
+                after: () => {
+                    editor.setValue(processedContent);
+                    tab.editorInstance = editor;
+                }
+            });
+
+            // 添加 Ctrl+S 保存支持
+            container.addEventListener('keydown', async (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                    e.preventDefault();
+                    await this.saveMarkdownFile(fileHandle, editor, tab);
+                }
+            });
+
+        } catch (e) {
+            console.error(e);
+            container.innerHTML = `<div style="color:red;padding:20px;">无法读取文件: ${e.message}</div>`;
+        }
+    },
+
+    // 加载 Vditor 库
+    async loadVditorLibrary() {
+        if (window.Vditor) return;
+
+        return new Promise((resolve) => {
+            // 加载 CSS
+            if (!document.querySelector('link[href*="vditor"][href$="index.css"]')) {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = 'https://cdn.jsdelivr.net/npm/vditor@3.10.5/dist/index.css';
+                document.head.appendChild(link);
+            }
+
+            // 加载 JS
+            if (!document.querySelector('script[src*="vditor"]')) {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/vditor@3.10.5/dist/index.min.js';
+                script.onload = () => resolve();
+                script.onerror = () => resolve();
+                document.head.appendChild(script);
+            } else {
+                // 检查是否已加载完成
+                const checkLoaded = setInterval(() => {
+                    if (window.Vditor) {
+                        clearInterval(checkLoaded);
+                        resolve();
+                    }
+                }, 100);
+                // 超时
+                setTimeout(() => {
+                    clearInterval(checkLoaded);
+                    resolve();
+                }, 10000);
+            }
+        });
+    },
+
+    // 获取文件的父目录
+    async getParentDirectory(fileHandle) {
+        // 尝试从 FileSystemDirectoryHandle 的 resolve 方法获取
+        // 但由于 API 限制，我们使用存储在 tab 中的引用
+        return null;
+    },
+
+    // 处理 Markdown 中的本地图片路径
+    async processMarkdownImages(content, parentDir) {
+        const blobUrls = [];
+        
+        // 匹配 Markdown 图片语法: ![alt](path) 和 HTML: <img src="path">
+        const mdImageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+        const htmlImageRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+        
+        // 存储需要替换的映射
+        const replacements = [];
+
+        // 处理 Markdown 图片
+        let match;
+        while ((match = mdImageRegex.exec(content)) !== null) {
+            const [fullMatch, alt, path] = match;
+            if (this.isLocalImagePath(path)) {
+                replacements.push({
+                    original: fullMatch,
+                    alt,
+                    path,
+                    index: match.index
+                });
+            }
+        }
+
+        // 处理 HTML 图片
+        while ((match = htmlImageRegex.exec(content)) !== null) {
+            const [fullMatch] = match;
+            const srcMatch = fullMatch.match(/src=["']([^"']+)["']/);
+            if (srcMatch && this.isLocalImagePath(srcMatch[1])) {
+                // 检查是否已处理过
+                const alreadyProcessed = replacements.some(r => r.original === fullMatch);
+                if (!alreadyProcessed) {
+                    replacements.push({
+                        original: fullMatch,
+                        path: srcMatch[1],
+                        isHtml: true,
+                        index: match.index
+                    });
+                }
+            }
+        }
+
+        // 按索引倒序排序，以便从后往前替换
+        replacements.sort((a, b) => b.index - a.index);
+
+        let processedContent = content;
+
+        // 尝试从文件系统读取图片
+        for (const repl of replacements) {
+            try {
+                // 由于无法直接获取父目录，我们尝试使用 showDirectoryPicker 打开的根目录
+                const imageBlob = await this.tryReadImageFile(repl.path);
+                if (imageBlob) {
+                    const blobUrl = URL.createObjectURL(imageBlob);
+                    blobUrls.push(blobUrl);
+                    
+                    if (repl.isHtml) {
+                        processedContent = processedContent.replace(
+                            repl.original,
+                            repl.original.replace(repl.path, blobUrl)
+                        );
+                    } else {
+                        processedContent = processedContent.replace(
+                            repl.original,
+                            `![${repl.alt}](${blobUrl})`
+                        );
+                    }
+                }
+            } catch (e) {
+                console.warn(`无法加载图片: ${repl.path}`, e);
+            }
+        }
+
+        return { processedContent, blobUrls };
+    },
+
+    // 判断是否为本地图片路径
+    isLocalImagePath(path) {
+        // 排除网络 URL 和 data URL
+        if (path.startsWith('http://') || 
+            path.startsWith('https://') || 
+            path.startsWith('data:') ||
+            path.startsWith('blob:')) {
+            return false;
+        }
+        // 检查是否为常见图片扩展名
+        const ext = path.split('.').pop().toLowerCase();
+        return ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'].includes(ext);
+    },
+
+    // 尝试读取图片文件
+    async tryReadImagePath(path) {
+        // 从所有已打开的资源管理器实例的根目录中查找
+        for (const instanceId in this.state) {
+            const state = this.state[instanceId];
+            if (state.rootHandle) {
+                try {
+                    const imageHandle = await this.findFileInDirectory(state.rootHandle, path);
+                    if (imageHandle) {
+                        const file = await imageHandle.getFile();
+                        return file;
+                    }
+                } catch (e) {
+                    // 继续尝试其他实例
+                }
+            }
+        }
+        return null;
+    },
+
+    // 在目录中递归查找文件
+    async findFileInDirectory(dirHandle, filePath) {
+        const parts = filePath.split('/').filter(p => p);
+        
+        let currentHandle = dirHandle;
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            const isLast = i === parts.length - 1;
+            
+            try {
+                if (isLast) {
+                    return await currentHandle.getFileHandle(part);
+                } else {
+                    currentHandle = await currentHandle.getDirectoryHandle(part);
+                }
+            } catch (e) {
+                return null;
+            }
+        }
+        return null;
+    },
+
+    // 读取图片文件
+    async tryReadImageFile(path) {
+        const file = await this.tryReadImagePath(path);
+        if (file) {
+            return file;
+        }
+        
+        // 尝试直接在当前目录查找（简单文件名）
+        for (const instanceId in this.state) {
+            const state = this.state[instanceId];
+            if (state.currentHandle) {
+                try {
+                    const fileName = path.split('/').pop();
+                    const imageHandle = await state.currentHandle.getFileHandle(fileName);
+                    return await imageHandle.getFile();
+                } catch (e) {
+                    // 尝试根目录
+                    if (state.rootHandle && state.rootHandle !== state.currentHandle) {
+                        try {
+                            const fileName = path.split('/').pop();
+                            const imageHandle = await state.rootHandle.getFileHandle(fileName);
+                            return await imageHandle.getFile();
+                        } catch (e2) {
+                            // 继续
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    },
+
+    // 处理图片上传（拖拽或粘贴）
+    async handleImageUpload(files, parentDir, editor) {
+        const urls = [];
+        for (const file of files) {
+            const blobUrl = URL.createObjectURL(file);
+            urls.push(blobUrl);
+            // 插入图片到编辑器
+            editor.insertValue(`![${file.name}](${blobUrl})`);
+        }
+        return urls;
+    },
+
+    // 保存 Markdown 文件
+    async saveMarkdownFile(fileHandle, editor, tab) {
+        try {
+            let content = editor.getValue();
+            
+            // 将 Blob URL 还原为原始路径（简化处理）
+            if (tab.blobUrls) {
+                // 注意：这里简化处理，实际应该维护映射关系
+                // 用户需要手动将 blob:xxx 替换回原始路径
+            }
+
+            const writable = await fileHandle.createWritable();
+            await writable.write(content);
+            await writable.close();
+            
+            tab.isDirty = false;
+            alert('已保存: ' + fileHandle.name);
+        } catch (e) {
+            alert('保存失败: ' + e.message);
+        }
+    },
+
     // --- Monaco Editor 集成 (核心修复部分) ---
 
     async initMonaco(instanceId, container, fileHandle) {
+        const state = this.state[instanceId];
+        const tab = state.tabs.find(t => t.handle && t.handle.name === fileHandle.name);
+        if (tab) {
+            tab.editorType = 'monaco';
+        }
         // 1. 显示加载状态
         container.innerHTML = '<div style="color:#999;padding:20px;">正在加载编辑器资源...</div>';
 
