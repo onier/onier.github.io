@@ -92,7 +92,8 @@ const FileExplorerApp = {
             handle: fileHandle,
             contentDivId: contentId,
             editorInstance: null, // 稍后填充
-            editorType: null // 'monaco' 或 'vditor'
+            editorType: null, // 'monaco' 或 'vditor'
+            parentDirHandle: state.currentHandle // 存储文件所在目录，用于解析相对路径图片
         };
 
         state.tabs.push(newTab);
@@ -235,24 +236,43 @@ const FileExplorerApp = {
         tab.editorType = 'vditor';
         container.innerHTML = '<div style="color:#999;padding:20px;">正在加载 Markdown 编辑器...</div>';
 
-        // 确保 Vditor 已加载
+        // 确保 Vditor 已加载 - 等待最多 15 秒
+        let waitCount = 0;
+        const maxWait = 150; // 150 * 100ms = 15s
+        while (typeof window.Vditor === 'undefined' && waitCount < maxWait) {
+            await new Promise(r => setTimeout(r, 100));
+            waitCount++;
+        }
+
+        // 如果仍不存在，尝试动态加载
         if (typeof window.Vditor === 'undefined') {
+            console.log('Vditor not found in window, trying to load...');
             await this.loadVditorLibrary();
         }
 
+        // 再次等待加载完成
+        waitCount = 0;
+        while (typeof window.Vditor === 'undefined' && waitCount < maxWait) {
+            await new Promise(r => setTimeout(r, 100));
+            waitCount++;
+        }
+
         if (typeof window.Vditor === 'undefined') {
-            container.innerHTML = '<div style="color:red;padding:20px;">错误: Vditor 加载失败</div>';
+            console.error('Vditor failed to load after retries');
+            container.innerHTML = '<div style="color:red;padding:20px;">错误: Vditor 加载失败<br>请检查网络连接或刷新页面重试</div>';
             return;
         }
+
+        console.log('Vditor loaded successfully, initializing editor...');
 
         try {
             const file = await fileHandle.getFile();
             let content = await file.text();
 
-            // 处理本地图片：将相对路径转换为 Blob URL
-            const parentDir = await this.getParentDirectory(fileHandle);
-            const { processedContent, blobUrls } = await this.processMarkdownImages(content, parentDir);
-            tab.blobUrls = blobUrls;
+            // 处理本地图片：将相对路径转换为 base64
+            const parentDirHandle = tab.parentDirHandle;
+            content = await this.processMarkdownImages(content, parentDirHandle);
+            console.log('Markdown images processed');
 
             // 清空容器
             container.innerHTML = '';
@@ -304,7 +324,7 @@ const FileExplorerApp = {
                     tab.isDirty = true;
                 },
                 after: () => {
-                    editor.setValue(processedContent);
+                    editor.setValue(content);
                     tab.editorInstance = editor;
                 }
             });
@@ -323,40 +343,48 @@ const FileExplorerApp = {
         }
     },
 
-    // 加载 Vditor 库
+    // 加载 Vditor 库 (解决 AMD/RequireJS 冲突)
     async loadVditorLibrary() {
-        if (window.Vditor) return;
+        if (window.Vditor) return Promise.resolve();
 
         return new Promise((resolve) => {
             // 加载 CSS
-            if (!document.querySelector('link[href*="vditor"][href$="index.css"]')) {
+            if (!document.querySelector('link[href*="vditor"]')) {
+                console.log('Loading Vditor CSS...');
                 const link = document.createElement('link');
                 link.rel = 'stylesheet';
                 link.href = 'https://cdn.jsdelivr.net/npm/vditor@3.10.5/dist/index.css';
                 document.head.appendChild(link);
             }
 
-            // 加载 JS
-            if (!document.querySelector('script[src*="vditor"]')) {
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/vditor@3.10.5/dist/index.min.js';
-                script.onload = () => resolve();
-                script.onerror = () => resolve();
-                document.head.appendChild(script);
-            } else {
-                // 检查是否已加载完成
-                const checkLoaded = setInterval(() => {
-                    if (window.Vditor) {
-                        clearInterval(checkLoaded);
-                        resolve();
-                    }
-                }, 100);
-                // 超时
-                setTimeout(() => {
-                    clearInterval(checkLoaded);
-                    resolve();
-                }, 10000);
-            }
+            // 加载 JS - 需要处理 AMD 冲突
+            console.log('Loading Vditor JS with AMD workaround...');
+            
+            // 1. 备份现有的 define/require (Monaco Editor 使用)
+            const _define = window.define;
+            const _require = window.require;
+            
+            // 2. 暂时屏蔽 AMD，强制 Vditor 挂载到 window
+            window.define = undefined;
+            window.require = undefined;
+
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/vditor@3.10.5/dist/index.min.js';
+            script.onload = () => {
+                // 3. 恢复 AMD 环境
+                window.define = _define;
+                window.require = _require;
+                console.log('Vditor loaded successfully, AMD restored');
+                resolve();
+            };
+            script.onerror = (e) => {
+                // 3. 恢复 AMD 环境
+                window.define = _define;
+                window.require = _require;
+                console.error('Vditor script failed to load:', e);
+                resolve();
+            };
+            document.head.appendChild(script);
         });
     },
 
@@ -367,28 +395,21 @@ const FileExplorerApp = {
         return null;
     },
 
-    // 处理 Markdown 中的本地图片路径
-    async processMarkdownImages(content, parentDir) {
-        const blobUrls = [];
-        
+    // 处理 Markdown 中的本地图片路径 - 转换为 base64
+    async processMarkdownImages(content, parentDirHandle) {
         // 匹配 Markdown 图片语法: ![alt](path) 和 HTML: <img src="path">
         const mdImageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
         const htmlImageRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
         
         // 存储需要替换的映射
         const replacements = [];
+        let match;
 
         // 处理 Markdown 图片
-        let match;
         while ((match = mdImageRegex.exec(content)) !== null) {
             const [fullMatch, alt, path] = match;
             if (this.isLocalImagePath(path)) {
-                replacements.push({
-                    original: fullMatch,
-                    alt,
-                    path,
-                    index: match.index
-                });
+                replacements.push({ fullMatch, alt, path });
             }
         }
 
@@ -397,51 +418,58 @@ const FileExplorerApp = {
             const [fullMatch] = match;
             const srcMatch = fullMatch.match(/src=["']([^"']+)["']/);
             if (srcMatch && this.isLocalImagePath(srcMatch[1])) {
-                // 检查是否已处理过
-                const alreadyProcessed = replacements.some(r => r.original === fullMatch);
+                const alreadyProcessed = replacements.some(r => r.fullMatch === fullMatch);
                 if (!alreadyProcessed) {
-                    replacements.push({
-                        original: fullMatch,
-                        path: srcMatch[1],
-                        isHtml: true,
-                        index: match.index
-                    });
+                    replacements.push({ fullMatch, path: srcMatch[1], isHtml: true });
                 }
             }
         }
 
-        // 按索引倒序排序，以便从后往前替换
-        replacements.sort((a, b) => b.index - a.index);
-
         let processedContent = content;
 
-        // 尝试从文件系统读取图片
+        // 读取图片并转换为 base64
         for (const repl of replacements) {
             try {
-                // 由于无法直接获取父目录，我们尝试使用 showDirectoryPicker 打开的根目录
-                const imageBlob = await this.tryReadImageFile(repl.path);
-                if (imageBlob) {
-                    const blobUrl = URL.createObjectURL(imageBlob);
-                    blobUrls.push(blobUrl);
+                const imageFile = await this.tryReadImageFile(repl.path, parentDirHandle);
+                if (imageFile) {
+                    const base64 = await this.fileToBase64(imageFile);
+                    const dataUrl = `data:${imageFile.type || 'image/png'};base64,${base64}`;
                     
                     if (repl.isHtml) {
                         processedContent = processedContent.replace(
-                            repl.original,
-                            repl.original.replace(repl.path, blobUrl)
+                            repl.fullMatch,
+                            repl.fullMatch.replace(repl.path, dataUrl)
                         );
                     } else {
                         processedContent = processedContent.replace(
-                            repl.original,
-                            `![${repl.alt}](${blobUrl})`
+                            repl.fullMatch,
+                            `![${repl.alt}](${dataUrl})`
                         );
                     }
+                    console.log(`图片已转换: ${repl.path}`);
+                } else {
+                    console.warn(`图片未找到: ${repl.path}`);
                 }
             } catch (e) {
                 console.warn(`无法加载图片: ${repl.path}`, e);
             }
         }
 
-        return { processedContent, blobUrls };
+        return processedContent;
+    },
+
+    // 将 File 对象转换为 base64
+    async fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                // 去掉 data:xxx;base64, 前缀
+                const base64 = reader.result.split(',')[1];
+                resolve(base64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
     },
 
     // 判断是否为本地图片路径
@@ -458,20 +486,54 @@ const FileExplorerApp = {
         return ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'].includes(ext);
     },
 
-    // 尝试读取图片文件
-    async tryReadImagePath(path) {
-        // 从所有已打开的资源管理器实例的根目录中查找
+    // 尝试读取图片文件 (支持子目录路径如 images/xxx.png)
+    async tryReadImageFile(path, parentDirHandle = null) {
+        // 1. 优先从 MD 文件所在目录查找（相对路径）
+        if (parentDirHandle) {
+            try {
+                const imageHandle = await this.findFileInDirectory(parentDirHandle, path);
+                if (imageHandle) {
+                    return await imageHandle.getFile();
+                }
+            } catch (e) {
+                // 继续尝试其他方式
+            }
+        }
+
+        // 2. 从所有已打开的资源管理器实例的根目录中查找
         for (const instanceId in this.state) {
             const state = this.state[instanceId];
             if (state.rootHandle) {
                 try {
                     const imageHandle = await this.findFileInDirectory(state.rootHandle, path);
                     if (imageHandle) {
-                        const file = await imageHandle.getFile();
-                        return file;
+                        return await imageHandle.getFile();
                     }
                 } catch (e) {
                     // 继续尝试其他实例
+                }
+            }
+        }
+
+        // 3. 尝试直接在当前目录或根目录查找（简单文件名）
+        const fileName = path.split('/').pop();
+        for (const instanceId in this.state) {
+            const state = this.state[instanceId];
+            // 先尝试当前目录
+            if (state.currentHandle) {
+                try {
+                    const imageHandle = await state.currentHandle.getFileHandle(fileName);
+                    return await imageHandle.getFile();
+                } catch (e) {
+                    // 尝试根目录
+                    if (state.rootHandle && state.rootHandle !== state.currentHandle) {
+                        try {
+                            const imageHandle = await state.rootHandle.getFileHandle(fileName);
+                            return await imageHandle.getFile();
+                        } catch (e2) {
+                            // 继续
+                        }
+                    }
                 }
             }
         }
@@ -500,37 +562,7 @@ const FileExplorerApp = {
         return null;
     },
 
-    // 读取图片文件
-    async tryReadImageFile(path) {
-        const file = await this.tryReadImagePath(path);
-        if (file) {
-            return file;
-        }
-        
-        // 尝试直接在当前目录查找（简单文件名）
-        for (const instanceId in this.state) {
-            const state = this.state[instanceId];
-            if (state.currentHandle) {
-                try {
-                    const fileName = path.split('/').pop();
-                    const imageHandle = await state.currentHandle.getFileHandle(fileName);
-                    return await imageHandle.getFile();
-                } catch (e) {
-                    // 尝试根目录
-                    if (state.rootHandle && state.rootHandle !== state.currentHandle) {
-                        try {
-                            const fileName = path.split('/').pop();
-                            const imageHandle = await state.rootHandle.getFileHandle(fileName);
-                            return await imageHandle.getFile();
-                        } catch (e2) {
-                            // 继续
-                        }
-                    }
-                }
-            }
-        }
-        return null;
-    },
+
 
     // 处理图片上传（拖拽或粘贴）
     async handleImageUpload(files, parentDir, editor) {
