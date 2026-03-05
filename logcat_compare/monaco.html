@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Android Boot Log Analyzer (Auto-Folding)</title>
+    <link href="monaco_style.css" rel="stylesheet">
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+</head>
+
+<body>
+    <input type="file" id="global-file-input" style="display: none;" accept=".log,.txt,.json,.xml,*">
+
+    <!-- 工具栏 -->
+    <div id="toolbar">
+        <!-- 视图切换 -->
+        <div class="toggle-group">
+            <span class="toggle-label">视图:</span>
+            <button class="toggle-btn active" onclick="toggleEditor(1)">1</button>
+            <button class="toggle-btn active" onclick="toggleEditor(2)">2</button>
+            <button class="toggle-btn active" onclick="toggleEditor(3)">3</button>
+            <button class="toggle-btn active" onclick="toggleEditor(4)">4</button>
+        </div>
+
+        <!-- 全局正则过滤 -->
+        <div class="search-container">
+            <span class="toggle-label">全局正则过滤:</span>
+            <input type="text" id="filter-input" placeholder="输入正则 (例如: Error|Exception)... 匹配行将保留，其他隐藏">
+            <button class="filter-btn" onclick="applyFilter()">执行过滤</button>
+        </div>
+
+        <!-- 对比分析下拉菜单 -->
+        <div class="comparison-dropdown">
+            <button class="comparison-btn">对比分析 ▼</button>
+            <div class="comparison-content">
+                <div class="comparison-item" onclick="compareServices()">服务对比</div>
+                <div class="comparison-item" onclick="compareSlowOperations()">慢操作对比</div>
+                <div class="comparison-item" onclick="compareKeyPhases()">关键阶段对比</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑器网格 -->
+    <div id="layout-grid">
+        <div id="container-1" class="editor-container"></div>
+        <div id="container-2" class="editor-container"></div>
+        <div id="container-3" class="editor-container"></div>
+        <div id="container-4" class="editor-container"></div>
+    </div>
+
+    <!-- jQuery and DataTables -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    
+    <script src="https://unpkg.com/monaco-editor@latest/min/vs/loader.js"></script>
+    <script src="monaco.js"></script>
+    <script src="log_analyzer.js"></script>
+    <script src="log_service_analyzer.js"></script>
+    <script>
+        require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor@latest/min/vs' } });
+        window.MonacoEnvironment = { getWorkerUrl: () => proxy };
+
+        let proxy = URL.createObjectURL(new Blob([`
+            self.MonacoEnvironment = { baseUrl: 'https://unpkg.com/monaco-editor@latest/min/' };
+            importScripts('https://unpkg.com/monaco-editor@latest/min/vs/base/worker/workerMain.js');
+        `], { type: 'text/javascript' }));
+
+        const editorStates = {
+            1: { visible: true, container: null },
+            2: { visible: true, container: null },
+            3: { visible: true, container: null },
+            4: { visible: true, container: null }
+        };
+
+        const editorSettings = {
+            1: { showT0: true, showDelta: true, updateFn: null },
+            2: { showT0: true, showDelta: true, updateFn: null },
+            3: { showT0: true, showDelta: true, updateFn: null },
+            4: { showT0: true, showDelta: true, updateFn: null }
+        };
+
+        window.toggleEditor = function (id) {
+            const state = editorStates[id];
+            state.visible = !state.visible;
+            const btn = document.querySelectorAll('.toggle-group:first-child .toggle-btn')[id - 1];
+            if (state.visible) btn.classList.add('active');
+            else btn.classList.remove('active');
+            const container = document.getElementById(`container-${id}`);
+            if (state.visible) container.classList.remove('hidden');
+            else container.classList.add('hidden');
+            updateLayout();
+        };
+
+        window.toggleLocalTimeDisplay = function (editorIndex, type) {
+            const settings = editorSettings[editorIndex];
+            if (type === 't0') {
+                settings.showT0 = !settings.showT0;
+                const btn = document.getElementById(`btn-t0-${editorIndex}`);
+                settings.showT0 ? btn.classList.add('active') : btn.classList.remove('active');
+            } else if (type === 'delta') {
+                settings.showDelta = !settings.showDelta;
+                const btn = document.getElementById(`btn-delta-${editorIndex}`);
+                settings.showDelta ? btn.classList.add('active') : btn.classList.remove('active');
+            }
+            if (settings.updateFn) settings.updateFn();
+        };
+
+        function updateLayout() {
+            const visibleIds = Object.keys(editorStates).filter(k => editorStates[k].visible);
+            const count = visibleIds.length;
+            visibleIds.forEach((id, index) => {
+                const container = document.getElementById(`container-${id}`);
+                let width = '50%'; let height = '50%';
+                if (count === 1) { width = '100%'; height = '100%'; }
+                else if (count === 2) { width = '50%'; height = '100%'; }
+                else if (count === 3) {
+                    if (index < 2) { width = '50%'; height = '50%'; }
+                    else { width = '100%'; height = '50%'; }
+                }
+                else if (count === 4) { width = '50%'; height = '50%'; }
+                container.style.width = width;
+                container.style.height = height;
+            });
+        }
+
+        function parseLogTimestamp(lineContent) {
+            const patterns = [
+                { regex: /(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?)/, type: 'standard' },
+                { regex: /(\d{4}\/\d{2}\/\d{2}\s\d{2}:\d{2}:\d{2}(?:[.,]\d+)?)/, type: 'slash' },
+                { regex: /(\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}(?:[.,]\d+)?)/, type: 'no-year' },
+                { regex: /([A-Z][a-z]{2}\s+\d{1,2}\s\d{2}:\d{2}:\d{2})/, type: 'syslog' }
+            ];
+            for (let p of patterns) {
+                const match = lineContent.match(p.regex);
+                if (match) {
+                    let dateStr = match[1].replace(',', '.');
+                    if (p.type === 'no-year') dateStr = new Date().getFullYear() + '-' + dateStr;
+                    const ts = Date.parse(dateStr);
+                    if (!isNaN(ts)) return ts;
+                }
+            }
+            return null;
+        }
+
+        function formatDuration(ms, isTotal = false) {
+            const abs = Math.abs(ms);
+            const sign = ms >= 0 ? '+' : '';
+            if (abs < 1000) return `${sign}${ms}ms`;
+            else if (abs < 60000) return `${sign}${(ms / 1000).toFixed(2)}s`;
+            else {
+                const m = Math.floor(abs / 60000);
+                const s = ((abs % 60000) / 1000).toFixed(1);
+                return `${sign}${m}m${s}s`;
+            }
+        }
+
+        function updateEditorTitle(index, title) {
+            const titleEl = document.getElementById(`title-${index}`);
+            if (titleEl) {
+                titleEl.textContent = title;
+                titleEl.title = title;
+            }
+        }
+
+        require(["vs/editor/editor.main"], function () {
+            monaco.languages.registerFoldingRangeProvider('plaintext', {
+                provideFoldingRanges: function (model, context, token) {
+                    const resultRanges = [];
+                    const result = LogAnalyzer.run(model);
+                    let services = LogServiceAnalyzer.run(model);
+                    model.services_times = services;
+                    const lineCount = model.getLineCount();
+                    let milestones = [];
+                    for (let i = 1; i <= lineCount; i++) {
+                        const lineContent = model.getLineContent(i);
+                        const isMilestone = checkKeyWords(lineContent.toLowerCase());
+                        if (isMilestone) {
+                            milestones.push(i);
+                        }
+                    }
+                    for (let i = 0; i < result.count; i++) {
+                        let decoration = result.decorations[i];
+                        milestones.push(decoration.range.startLineNumber);
+                    }
+                    milestones.sort(function (a, b) { return a - b; });
+                    if (milestones.length > 0) {
+                        if (milestones[0] > 1) {
+                            resultRanges.push({
+                                start: 1,
+                                end: milestones[0] - 1,
+                                kind: monaco.languages.FoldingRangeKind.Region
+                            });
+                        }
+                        for (let j = 0; j < milestones.length - 1; j++) {
+                            const startLine = milestones[j];
+                            const nextLine = milestones[j + 1];
+                            if (nextLine > startLine + 1) {
+                                resultRanges.push({
+                                    start: startLine,
+                                    end: nextLine - 1,
+                                    kind: monaco.languages.FoldingRangeKind.Region
+                                });
+                            }
+                        }
+                        const lastMilestone = milestones[milestones.length - 1];
+                        if (lastMilestone < lineCount) {
+                            resultRanges.push({
+                                start: lastMilestone,
+                                end: lineCount,
+                                kind: monaco.languages.FoldingRangeKind.Region
+                            });
+                        }
+                    }
+
+                    return resultRanges;
+                }
+            });
+
+            window.triggerOpenFile = function (index) {
+                activeFileTargetIndex = index;
+                document.getElementById('global-file-input').value = '';
+                document.getElementById('global-file-input').click();
+            };
+
+            document.getElementById('global-file-input').addEventListener('change', function (e) {
+                const file = e.target.files[0];
+                if (!file || activeFileTargetIndex === -1) return;
+                readFileToEditor(file, editors[activeFileTargetIndex - 1], activeFileTargetIndex);
+            });
+
+            window.triggerSaveFile = function (index) {
+                const editor = editors[index - 1];
+                if (!editor) return;
+                const content = editor.getValue();
+                const blob = new Blob([content], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `editor-${index}-log.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            window.triggerCopyFiltered = function (index) {
+                const editor = editors[index - 1];
+                if (!editor) return;
+
+                const model = editor.getModel();
+                if (!model) return;
+
+                // 1. 获取当前的过滤正则（逻辑与 applyFilter 保持一致）
+                const input = document.getElementById('filter-input');
+                const regexStr = input.value;
+                let regex = null;
+
+                if (regexStr && regexStr.trim() !== "") {
+                    try {
+                        regex = new RegExp(regexStr, 'i');
+                    } catch (e) {
+                        // 正则错误时忽略，默认视为不过滤
+                    }
+                }
+
+                // 2. 遍历所有行，提取符合条件的行
+                const lineCount = model.getLineCount();
+                let resultLines = [];
+
+                for (let i = 1; i <= lineCount; i++) {
+                    const lineContent = model.getLineContent(i);
+                    // 如果没有正则（显示全部）或者 正则匹配成功，则保留该行
+                    if (!regex || regex.test(lineContent)) {
+                        resultLines.push(lineContent);
+                    }
+                }
+
+                if (resultLines.length === 0) {
+                    alert('当前没有可见内容可复制');
+                    return;
+                }
+
+                // 3. 写入剪贴板
+                const textToCopy = resultLines.join('\n');
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    alert(`Editor ${index}: 已成功复制 ${resultLines.length} 行可见内容`);
+                }).catch(err => {
+                    console.error('复制失败:', err);
+                    alert('复制失败，请检查浏览器权限');
+                });
+            };
+
+            window.triggerFoldAll = function (index) {
+                const editor = editors[index - 1];
+                if (!editor) return;
+                editor.trigger('fold', 'editor.foldAll');
+            };
+
+            window.triggerUnfoldAll = function (index) {
+                const editor = editors[index - 1];
+                if (!editor) return;
+                editor.trigger('unfold', 'editor.unfoldAll');
+            };
+
+            function readFileToEditor(file, editor, index) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const content = e.target.result;
+                    if (editor) {
+                        editor.setValue(content);
+                        editor.getModel().file_name = file.name;
+                        if (index) updateEditorTitle(index, file.name);
+                        setTimeout(() => {
+                            window.applyFilter();
+                            editor.trigger('fold', 'editor.foldAll');
+                        }, 300);
+                    }
+                };
+                reader.readAsText(file);
+            }
+
+            function createLogEditor(containerId, editorIndex, initialContent) {
+                const container = document.getElementById(containerId);
+                const toolbar = document.createElement('div');
+                toolbar.className = 'editor-mini-toolbar';
+
+                toolbar.innerHTML = `
+    <!-- 标题保持不变 -->
+    <span id="title-${editorIndex}" class="editor-title" title="Editor ${editorIndex}">Editor ${editorIndex}</span>
+    <!-- 错误徽章 (在左边) -->
+    <div id="error-badge-${editorIndex}" class="error-badge" title="当前错误数量" onclick="jumpToNextError(${editorIndex})">
+        <span class="error-icon">❌</span>
+        <span id="error-count-${editorIndex}">0</span>
+    </div>
+    <!-- 警告徽章 -->
+    <div id="warning-badge-${editorIndex}" class="warning-badge" title="当前警告数量" onclick="jumpToNextWarning(${editorIndex})">
+        <span class="warning-icon">⚠️</span>
+        <span id="warning-count-${editorIndex}">0</span>
+    </div>
+    <button id="btn-t0-${editorIndex}" class="mini-toggle active" title="显示距开始时间" onclick="toggleLocalTimeDisplay(${editorIndex}, 't0')">T0</button>
+    <button id="btn-delta-${editorIndex}" class="mini-toggle active" title="显示距上一行时间" onclick="toggleLocalTimeDisplay(${editorIndex}, 'delta')">Δ</button>
+
+    <!-- 分隔符 -->
+    <div class="mini-separator"></div>
+
+    <!-- 下拉菜单容器 -->
+    <div class="toolbar-dropdown">
+        <!-- 触发按钮 (使用三点图标或文字) -->
+        <button class="mini-btn dropdown-btn">\u22EE 操作</button>
+        
+        <!-- 下拉内容列表 -->
+        <div class="dropdown-content">
+            <div class="dropdown-item" onclick="triggerOpenFile(${editorIndex})">
+                <span>\uD83D\uDCC2</span> 打开文件
+            </div>
+            <div class="dropdown-item" onclick="triggerSaveFile(${editorIndex})">
+                <span>\uD83D\uDCBE</span> 保存文件
+            </div>
+            <div class="dropdown-divider"></div>
+             <!-- 【新增】复制可见内容按钮 -->
+            <div class="dropdown-item" onclick="triggerCopyFiltered(${editorIndex})">
+                <span>📋</span> 复制显示内容
+            </div>
+            <div class="dropdown-item" onclick="triggerFoldAll(${editorIndex})">
+                <span>\u229F</span> 全部折叠
+            </div>
+            <div class="dropdown-item" onclick="triggerUnfoldAll(${editorIndex})">
+                <span>\u229E</span> 全部展开
+            </div>
+        </div>
+    </div>
+`;
+                container.appendChild(toolbar);
+
+                const modelUri = monaco.Uri.parse(`inmemory://logs/editor-${editorIndex}`);
+                const model = monaco.editor.createModel(initialContent, 'plaintext', modelUri);
+
+                const editor = monaco.editor.create(container, {
+                    model: model,
+                    language: 'plaintext',
+                    theme: 'vs',
+                    lineNumbers: 'on',
+                    lineDecorationsWidth: 150,
+                    lineNumbersMinChars: 3,
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    folding: true,
+                    glyphMargin: true,
+                    foldingStrategy: 'auto'
+                });
+
+                editorStates[editorIndex].container = container;
+
+                container.addEventListener('dragover', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    container.classList.add('drag-active');
+                });
+                container.addEventListener('dragleave', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    container.classList.remove('drag-active');
+                });
+                container.addEventListener('drop', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    container.classList.remove('drag-active');
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) readFileToEditor(files[0], editor, editorIndex);
+                });
+
+                const styleElement = document.createElement('style');
+                document.head.appendChild(styleElement);
+                let oldDecorations = [];
+
+                function updateTimeDiff() {
+                    const model = editor.getModel();
+                    if (!model) return;
+                    const result = LogAnalyzer.run(editor.getModel());
+                    
+                    // 更新错误计数
+                    let errorId = "error-count-" + editorIndex;
+                    document.getElementById(errorId).textContent = result.errorCount;
+                    
+                    // 更新警告计数
+                    let warnId = "warning-count-" + editorIndex;
+                    document.getElementById(warnId).textContent = result.warningCount;
+                    
+                    console.log(`分析完成，发现 ${result.errorCount} 个错误，${result.warningCount} 个警告`);
+                    const settings = editorSettings[editorIndex];
+                    let requiredWidth = 10;
+                    if (settings.showT0 && settings.showDelta) requiredWidth = 150;
+                    else if (settings.showT0 || settings.showDelta) requiredWidth = 80;
+                    editor.updateOptions({ lineDecorationsWidth: requiredWidth });
+
+                    if (!settings.showT0 && !settings.showDelta) {
+                        oldDecorations = editor.deltaDecorations(oldDecorations, []);
+                        styleElement.innerHTML = "";
+                        return;
+                    }
+                    let lineTimes = calculatelineTime(model);
+                    const lineCount = model.getLineCount();
+                    const decorations = [];
+                    let cssRules = "";
+                    let firstTime = null;
+                    let lastTime = null;
+
+                    for (let i = 1; i <= lineCount; i++) {
+                        const lineContent = model.getLineContent(i);
+                        let timeInfo = getTimeByLine(lineTimes, i);
+
+
+                        if (timeInfo !== null) {
+                            const currentTime = timeInfo.currentTime;
+                            if (firstTime === null) firstTime = currentTime;
+                            let displayParts = [];
+                            let isLong = false;
+                            if (settings.showT0) {
+                                const diffFromStart = currentTime - firstTime;
+                                displayParts.push(`T${formatDuration(diffFromStart, true)}`);
+                            }
+                            if (settings.showDelta) {
+                                let deltaText = "Start";
+                                if (lastTime !== null) {
+                                    const diff = currentTime - lastTime;
+                                    deltaText = formatDuration(diff);
+                                    if (Math.abs(diff) >= 1000)
+                                        isLong = true;
+                                }
+                                displayParts.push(deltaText);
+                            }
+                            const displayText = displayParts.join(' | ');
+                            const uniqueClass = `diff-e${editorIndex}-l${i}`;
+                            const colorClass = (isLong || timeInfo.isShift) ? 'time-diff-long' : '';
+                            const cssWidth = requiredWidth - 10;
+                            cssRules += `.${uniqueClass}::after { content: "${displayText}"; width: ${cssWidth}px; }\n`;
+                            decorations.push({
+                                range: new monaco.Range(i, 1, i, 1),
+                                options: { isWholeLine: true, linesDecorationsClassName: `time-diff-gutter ${colorClass} ${uniqueClass}` }
+                            });
+                            lastTime = currentTime;
+                        }
+                    }
+                    styleElement.innerHTML = cssRules;
+                    // decorations.push({
+                    //     range: new monaco.Range(1, 1, 1, 1), // 第 10 行
+                    //     options: {
+                    //         isWholeLine: true,
+                    //         className: 'myLineDecoration',
+                    //         hoverMessage: {
+                    //             value: '**错误详情**\n\n这一行代码存在严重的逻辑漏洞，请检查。'
+                    //         }
+                    //     }
+                    // });
+                    result.decorations.forEach(decoration => {
+                        // console.log(decoration);
+                        decorations.push(decoration);
+                        decorations.push({
+                            range: decoration.range, // 第 10 行
+                            isWholeLine: true,
+                            options: decoration.options
+                        });
+                    });
+                    // 存储错误和警告装饰信息
+                    editorErrorDecorations[editorIndex] = result.errorDecorations;
+                    editorWarningDecorations[editorIndex] = result.warningDecorations;
+                    oldDecorations = editor.deltaDecorations(oldDecorations, decorations);
+                }
+
+                editorSettings[editorIndex].updateFn = updateTimeDiff;
+                updateTimeDiff();
+                editor.onDidChangeModelContent(() => setTimeout(updateTimeDiff, 100));
+                editors.push(editor);
+                return editor;
+            }
+
+            createLogEditor('container-1', 1, "");
+            createLogEditor('container-2', 2, "");
+            createLogEditor('container-3', 3, "");
+            createLogEditor('container-4', 4, "");
+            updateLayout();
+
+            // --- 核心过滤逻辑 (全局生效) ---
+            window.applyFilter = function () {
+                const input = document.getElementById('filter-input');
+                const regexStr = input.value;
+                let regex = null;
+
+                if (regexStr && regexStr.trim() !== "") {
+                    try {
+                        regex = new RegExp(regexStr, 'i');
+                        input.classList.remove('error');
+                    } catch (e) {
+                        input.classList.add('error');
+                        return;
+                    }
+                } else {
+                    input.classList.remove('error');
+                }
+
+                editors.forEach(editor => {
+                    const model = editor.getModel();
+                    if (!model) return;
+
+                    if (!regex) {
+                        editor.setHiddenAreas([]);
+                        return;
+                    }
+
+                    const lineCount = model.getLineCount();
+                    const hiddenRanges = [];
+                    let startHideLine = -1;
+
+                    for (let i = 1; i <= lineCount; i++) {
+                        const lineContent = model.getLineContent(i);
+                        const isMatch = regex.test(lineContent);
+
+                        if (!isMatch) {
+                            if (startHideLine === -1) startHideLine = i;
+                        } else {
+                            if (startHideLine !== -1) {
+                                hiddenRanges.push(new monaco.Range(startHideLine, 1, i - 1, 1));
+                                startHideLine = -1;
+                            }
+                        }
+                    }
+                    if (startHideLine !== -1) {
+                        hiddenRanges.push(new monaco.Range(startHideLine, 1, lineCount, 1));
+                    }
+
+                    editor.setHiddenAreas(hiddenRanges);
+                });
+            };
+
+            document.getElementById('filter-input').addEventListener('keyup', function (event) {
+                if (event.key === 'Enter') {
+                    window.applyFilter();
+                }
+            });
+
+            // --- 接收消息逻辑 (简化版) ---
+            window.addEventListener('message', (event) => {
+                const datas = event.data;
+                if (!Array.isArray(datas)) return;
+
+                datas.forEach(data => {
+                    let file = data.file;
+                    let enties = data.enties;
+
+                    // 构造文本内容
+                    let content = "";
+                    enties.forEach(lineObj => {
+                        if(!lineObj.line.includes("--------- beginning of")){
+                            content += lineObj.line + "\n";
+                        }
+                    });
+
+                    // 获取编辑器索引
+                    const editorIndex = filesMap[file];
+                    if (editorIndex !== undefined && editors[editorIndex]) {
+                        // 更新标题
+                        updateEditorTitle(editorIndex + 1, file);
+
+                        // 设置内容 (这将触发 Model 变更 -> 触发 provideFoldingRanges -> 自动计算折叠)
+                        editors[editorIndex].getModel().file_name = file;   
+                        editors[editorIndex].setValue(content);
+
+                        // 自动触发全部折叠，让用户直接看到摘要视图
+                        setTimeout(() => {
+                            editors[editorIndex].trigger('fold', 'editor.foldAll');
+                        }, 300);
+                    }
+                });
+            });
+
+            window.onload = function () {
+                const params = new URLSearchParams(window.location.search);
+                ['file1', 'file2', 'file3', 'file4'].forEach((key, i) => {
+                    const url = params.get(key);
+                    if (url) filesMap[url] = i;
+                });
+                if (window.opener) {
+                    window.opener.postMessage("ready", '*');
+                }
+            };
+
+            function compareSlowOperations() {
+                console.log('慢操作对比功能待实现');
+                alert('慢操作对比功能待实现');
+            }
+
+            function compareKeyPhases() {
+                console.log('关键阶段对比功能待实现');
+                alert('关键阶段对比功能待实现');
+            }
+        });
+    </script>
+</body>
+
+</html>

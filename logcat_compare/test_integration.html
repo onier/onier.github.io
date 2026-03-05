@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>串口Log分析集成测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .log {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>串口Log分析集成测试</h1>
+    
+    <div class="test-section">
+        <h2>1. 测试文件加载</h2>
+        <button onclick="testFileUtils()">测试 FileUtils 集成</button>
+        <div id="fileUtilsResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. 测试分析器功能</h2>
+        <button onclick="testAnalyzer()">测试 PortLogAnalyzer</button>
+        <div id="analyzerResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. 测试管理器功能</h2>
+        <button onclick="testManager()">测试 PortLogAnalysisManager</button>
+        <div id="managerResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>4. 完整流程测试</h2>
+        <button onclick="testFullFlow()">测试完整流程</button>
+        <div id="fullFlowResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试日志</h2>
+        <div id="testLog" class="log"></div>
+    </div>
+
+    <script src="port_log_analyzer.js"></script>
+    <script src="port_log_analysis_manager.js"></script>
+    <script src="file_utils.js"></script>
+    
+    <script>
+        let logOutput = '';
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}\n`;
+            logOutput = logEntry + logOutput;
+            document.getElementById('testLog').textContent = logOutput;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        function clearLog() {
+            logOutput = '';
+            document.getElementById('testLog').textContent = '';
+        }
+        
+        // 测试数据
+        const testPortLogContent = `[2025-12-06 17:31:05.202147] Runtimes:1
+[2025-12-06 17:31:05.202148] Format: Log Type - Time
+[2025-12-06 17:32:17.892147] Runtimes:2
+[2025-12-06 17:32:17.892148] Format: Log Type - Time
+[2025-12-06 17:33:35.032147] Runtimes:3
+[2025-12-06 17:33:35.032148] Format: Log Type - Time
+[2025-12-06 17:34:51.682147] Runtimes:4
+[2025-12-06 17:34:51.682148] Format: Log Type - Time`;
+        
+        function testFileUtils() {
+            clearLog();
+            log('开始测试 FileUtils 集成...');
+            
+            try {
+                // 创建 FileUtils 实例
+                const fileUtils = new FileUtils();
+                log('✓ FileUtils 实例创建成功');
+                
+                // 测试 parse_port_log_file 方法
+                const result = fileUtils.parse_port_log_file(testPortLogContent);
+                log(`✓ parse_port_log_file 调用成功，返回: ${result ? '有数据' : '无数据'}`);
+                
+                document.getElementById('fileUtilsResult').innerHTML = 
+                    '<div class="success">✓ FileUtils 集成测试通过</div>';
+                
+            } catch (error) {
+                log(`✗ FileUtils 测试失败: ${error.message}`, 'error');
+                document.getElementById('fileUtilsResult').innerHTML = 
+                    `<div class="error">✗ FileUtils 集成测试失败: ${error.message}</div>`;
+            }
+        }
+        
+        function testAnalyzer() {
+            clearLog();
+            log('开始测试 PortLogAnalyzer...');
+            
+            try {
+                if (!window.PortLogAnalyzer) {
+                    throw new Error('PortLogAnalyzer 未加载');
+                }
+                
+                const analyzer = new window.PortLogAnalyzer();
+                log('✓ PortLogAnalyzer 实例创建成功');
+                
+                const result = analyzer.parsePortLogFile(testPortLogContent);
+                log(`✓ 解析成功，找到 ${result.runtimes.length} 个Runtimes`);
+                
+                const analysis = analyzer.portLogAnalysis;
+                log(`✓ 分析完成，统计信息: ${JSON.stringify(analysis.stats)}`);
+                
+                document.getElementById('analyzerResult').innerHTML = 
+                    '<div class="success">✓ PortLogAnalyzer 测试通过</div>';
+                
+            } catch (error) {
+                log(`✗ PortLogAnalyzer 测试失败: ${error.message}`, 'error');
+                document.getElementById('analyzerResult').innerHTML = 
+                    `<div class="error">✗ PortLogAnalyzer 测试失败: ${error.message}</div>`;
+            }
+        }
+        
+        function testManager() {
+            clearLog();
+            log('开始测试 PortLogAnalysisManager...');
+            
+            try {
+                if (!window.portLogAnalysisManager) {
+                    throw new Error('PortLogAnalysisManager 未加载');
+                }
+                
+                log('✓ PortLogAnalysisManager 已加载');
+                
+                // 初始化管理器
+                window.portLogAnalysisManager.init();
+                log('✓ 管理器初始化成功');
+                
+                // 更新表格
+                window.portLogAnalysisManager.updateTable(testPortLogContent);
+                log('✓ 表格更新成功');
+                
+                document.getElementById('managerResult').innerHTML = 
+                    '<div class="success">✓ PortLogAnalysisManager 测试通过</div>';
+                
+            } catch (error) {
+                log(`✗ PortLogAnalysisManager 测试失败: ${error.message}`, 'error');
+                document.getElementById('managerResult').innerHTML = 
+                    `<div class="error">✗ PortLogAnalysisManager 测试失败: ${error.message}</div>`;
+            }
+        }
+        
+        function testFullFlow() {
+            clearLog();
+            log('开始测试完整流程...');
+            
+            try {
+                // 1. 测试分析器
+                if (!window.PortLogAnalyzer) {
+                    throw new Error('PortLogAnalyzer 未加载');
+                }
+                const analyzer = new window.PortLogAnalyzer();
+                const parseResult = analyzer.parsePortLogFile(testPortLogContent);
+                log(`✓ 步骤1: 分析器解析成功，找到 ${parseResult.runtimes.length} 个Runtimes`);
+                
+                // 2. 测试管理器
+                if (!window.portLogAnalysisManager) {
+                    throw new Error('PortLogAnalysisManager 未加载');
+                }
+                window.portLogAnalysisManager.init();
+                window.portLogAnalysisManager.updateTable(testPortLogContent);
+                log('✓ 步骤2: 管理器更新成功');
+                
+                // 3. 测试表格数据生成
+                const tableData = analyzer.getTableData();
+                log(`✓ 步骤3: 表格数据生成成功，时间间隔表格: ${tableData.timeIntervalTable.length} 行`);
+                
+                // 4. 测试CSV导出
+                const csv = analyzer.exportToCSV();
+                log(`✓ 步骤4: CSV导出成功，长度: ${csv.length} 字符`);
+                
+                // 5. 测试统计信息
+                const stats = analyzer.portLogAnalysis.stats;
+                log(`✓ 步骤5: 统计信息计算成功，总Runtimes: ${stats.totalRuntimes}`);
+                
+                document.getElementById('fullFlowResult').innerHTML = 
+                    '<div class="success">✓ 完整流程测试通过！所有功能正常工作。</div>';
+                
+            } catch (error) {
+                log(`✗ 完整流程测试失败: ${error.message}`, 'error');
+                document.getElementById('fullFlowResult').innerHTML = 
+                    `<div class="error">✗ 完整流程测试失败: ${error.message}</div>`;
+            }
+        }
+        
+        // 页面加载完成后初始化日志
+        document.addEventListener('DOMContentLoaded', function() {
+            log('测试页面加载完成');
+            log('点击上面的按钮开始测试');
+        });
+    </script>
+</body>
+</html>

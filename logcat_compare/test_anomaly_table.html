@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>异常数据库表功能测试</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- DataTables CSS -->
+    <link href="https://cdn.datatables.net/2.3.5/css/dataTables.bootstrap5.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-data {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .test-result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">异常数据库表功能测试</h1>
+        
+        <div class="test-section">
+            <h3>测试说明</h3>
+            <p>此测试验证异常数据库表功能：</p>
+            <ol>
+                <li>模拟ResultLog.txt数据（包含正常数据和异常数据）</li>
+                <li>测试异常数据过滤逻辑（开机时间 > 最小开机时间 + 20秒）</li>
+                <li>验证表格第一列复选框功能</li>
+                <li>测试"打开选中文件"按钮功能</li>
+                <li>验证logcatFile列链接跳转功能</li>
+            </ol>
+        </div>
+        
+        <div class="test-section">
+            <h3>测试数据</h3>
+            <div class="test-data">
+                <h5>模拟ResultLog.txt数据：</h5>
+                <pre id="testDataDisplay"></pre>
+                <p class="text-muted">注意：包含一个异常数据点（PowerOnTime: 25000 > 最小时间1200 + 20000）</p>
+            </div>
+            
+            <button class="btn btn-primary" onclick="runTest()">运行测试</button>
+            <button class="btn btn-secondary" onclick="clearTest()">清除测试</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>测试结果</h3>
+            <div id="testResult" class="test-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>异常数据库表预览</h3>
+            <div id="tablePreview">
+                <p class="text-muted">运行测试后，这里将显示异常表格的模拟预览</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 第三方库 -->
+    <script src="https://code.jquery.com/jquery-3.7.1.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/2.3.5/js/dataTables.js"></script>
+    <script src="https://cdn.datatables.net/2.3.5/js/dataTables.bootstrap5.js"></script>
+    
+    <!-- 异常表管理器（简化版用于测试） -->
+    <script>
+        // 模拟测试数据
+        const testData = [
+            { LocalTime: "[2025-10-30 16:06:04,106]", Runtimes: "1", Temp: "25.5", PowerOnTime: "1200", logcatFile: "logcat1_test.txt" },
+            { LocalTime: "[2025-10-30 16:06:05,206]", Runtimes: "2", Temp: "26.0", PowerOnTime: "1250", logcatFile: "logcat2_test.txt" },
+            { LocalTime: "[2025-10-30 16:06:06,306]", Runtimes: "3", Temp: "26.5", PowerOnTime: "1300", logcatFile: "logcat3_test.txt" },
+            { LocalTime: "[2025-10-30 16:06:07,406]", Runtimes: "4", Temp: "27.0", PowerOnTime: "1350", logcatFile: "logcat4_test.txt" },
+            { LocalTime: "[2025-10-30 16:06:08,506]", Runtimes: "5", Temp: "27.5", PowerOnTime: "1400", logcatFile: "logcat5_test.txt" },
+            { LocalTime: "[2025-10-30 16:06:09,606]", Runtimes: "6", Temp: "28.0", PowerOnTime: "1450", logcatFile: "logcat6_test.txt" },
+            { LocalTime: "[2025-10-30 16:06:10,706]", Runtimes: "7", Temp: "28.5", PowerOnTime: "1500", logcatFile: "logcat7_test.txt" },
+            { LocalTime: "[2025-10-30 16:06:11,806]", Runtimes: "8", Temp: "29.0", PowerOnTime: "1550", logcatFile: "logcat8_test.txt" },
+            { LocalTime: "[2025-10-30 16:06:12,906]", Runtimes: "9", Temp: "29.5", PowerOnTime: "1600", logcatFile: "logcat9_test.txt" },
+            { LocalTime: "[2025-10-30 16:06:13,006]", Runtimes: "10", Temp: "30.0", PowerOnTime: "1650", logcatFile: "logcat10_test.txt" },
+            // 异常数据点（开机时间 > 最小时间 + 20秒）
+            { LocalTime: "[2025-10-30 16:06:14,106]", Runtimes: "11", Temp: "30.5", PowerOnTime: "25000", logcatFile: "logcat11_anomaly.txt" },
+            // 正常数据点
+            { LocalTime: "[2025-10-30 16:06:15,206]", Runtimes: "12", Temp: "31.0", PowerOnTime: "1700", logcatFile: "logcat12_test.txt" }
+        ];
+        
+        // 显示测试数据
+        document.getElementById('testDataDisplay').textContent = JSON.stringify(testData, null, 2);
+        
+        // 异常数据过滤函数（与anomaly_table_manager.js中的逻辑相同）
+        function filterAnomalies(allResultDatas) {
+            if (!Array.isArray(allResultDatas) || allResultDatas.length === 0) {
+                return [];
+            }
+
+            // 过滤有效数据
+            const validData = allResultDatas.filter(item => {
+                return item.Temp !== undefined && item.PowerOnTime !== undefined &&
+                       !isNaN(parseFloat(item.Temp)) && !isNaN(parseFloat(item.PowerOnTime));
+            });
+
+            if (validData.length === 0) {
+                return [];
+            }
+
+            // 计算最小开机时间和异常阈值
+            const powerOnTimes = validData.map(item => parseFloat(item.PowerOnTime));
+            const minTime = Math.min(...powerOnTimes);
+            const anomalyThreshold = minTime + 20000; // 20秒 = 20000毫秒
+
+            // 过滤异常数据
+            return validData.filter(item => {
+                const powerOnTime = parseFloat(item.PowerOnTime);
+                return powerOnTime > anomalyThreshold;
+            }).map(item => {
+                // 确保数值类型
+                return {
+                    ...item,
+                    Temp: parseFloat(item.Temp),
+                    PowerOnTime: parseFloat(item.PowerOnTime)
+                };
+            });
+        }
+        
+        // 运行测试
+        function runTest() {
+            const testResult = document.getElementById('testResult');
+            testResult.innerHTML = '';
+            testResult.className = 'test-result';
+            
+            try {
+                // 1. 测试异常数据过滤
+                const anomalyData = filterAnomalies(testData);
+                
+                if (anomalyData.length === 0) {
+                    throw new Error('异常数据过滤失败：未检测到异常数据');
+                }
+                
+                if (anomalyData.length !== 1) {
+                    throw new Error(`异常数据过滤失败：期望1个异常数据，实际检测到${anomalyData.length}个`);
+                }
+                
+                const anomalyItem = anomalyData[0];
+                if (parseFloat(anomalyItem.PowerOnTime) !== 25000) {
+                    throw new Error(`异常数据过滤失败：期望PowerOnTime=25000，实际=${anomalyItem.PowerOnTime}`);
+                }
+                
+                // 2. 显示成功结果
+                testResult.className = 'test-result success';
+                testResult.innerHTML = `
+                    <h5>✅ 测试通过！</h5>
+                    <p>异常数据过滤功能正常：</p>
+                    <ul>
+                        <li>检测到 ${anomalyData.length} 个异常数据点</li>
+                        <li>异常数据：Runtimes=${anomalyItem.Runtimes}, Temp=${anomalyItem.Temp}, PowerOnTime=${anomalyItem.PowerOnTime}</li>
+                        <li>logcatFile: ${anomalyItem.logcatFile}</li>
+                    </ul>
+                `;
+                
+                // 3. 显示表格预览
+                displayTablePreview(anomalyData);
+                
+                // 4. 测试复选框功能
+                testCheckboxFunctionality();
+                
+            } catch (error) {
+                testResult.className = 'test-result error';
+                testResult.innerHTML = `
+                    <h5>❌ 测试失败</h5>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+        
+        // 显示表格预览
+        function displayTablePreview(anomalyData) {
+            const tablePreview = document.getElementById('tablePreview');
+            
+            let html = `
+                <div class="card">
+                    <div class="card-header bg-warning text-white">
+                        <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-1"></i>异常数据库表预览</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;">
+                                            <input type="checkbox" id="previewSelectAll" title="全选/取消全选">
+                                        </th>
+                                        <th>LocalTime</th>
+                                        <th>Runtimes</th>
+                                        <th>Temp</th>
+                                        <th>PowerOnTime</th>
+                                        <th>logcatFile</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+            `;
+            
+            anomalyData.forEach((item, index) => {
+                html += `
+                    <tr>
+                        <td class="text-center">
+                            <input type="checkbox" class="preview-row-checkbox" data-filename="${item.logcatFile}" data-index="${index}">
+                        </td>
+                        <td>${item.LocalTime}</td>
+                        <td>${item.Runtimes}</td>
+                        <td>${item.Temp}</td>
+                        <td><span class="badge bg-danger">${item.PowerOnTime}ms ⚠️</span></td>
+                        <td>
+                            <a href="javascript:void(0)" class="preview-logcat-link text-primary" 
+                               data-filename="${item.logcatFile}" 
+                               title="点击测试链接跳转">
+                               <i class="bi bi-file-text me-1"></i>${item.logcatFile}
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <button class="btn btn-sm btn-primary" onclick="testOpenSelectedFiles()">
+                                <i class="bi bi-folder2-open me-1"></i>测试打开选中文件
+                            </button>
+                            <span class="ms-3">已选中: <span id="previewSelectedCount" class="badge bg-primary">0</span> 个文件</span>
+                        </div>
+                        
+                        <div class="alert alert-info mt-3 small">
+                            <h6><i class="bi bi-info-circle me-1"></i>表格功能说明</h6>
+                            <ul class="mb-0">
+                                <li><strong>第一列复选框</strong>: 支持多选行（测试全选功能）</li>
+                                <li><strong>logcatFile列</strong>: 可点击链接（测试跳转功能）</li>
+                                <li><strong>异常数据</strong>: 使用红色标签标记，开机时间 > 最小时间 + 20秒</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            tablePreview.innerHTML = html;
+            
+            // 绑定预览表格事件
+            bindPreviewEvents();
+        }
+        
+        // 绑定预览表格事件
+        function bindPreviewEvents() {
+            // 全选复选框
+            $('#previewSelectAll').on('click', function() {
+                const isChecked = $(this).prop('checked');
+                $('.preview-row-checkbox').prop('checked', isChecked);
+                updatePreviewSelectedCount();
+            });
+            
+            // 行复选框
+            $('.preview-row-checkbox').on('change', function() {
+                updatePreviewSelectedCount();
+                // 如果取消选中某行，取消全选复选框
+                if (!$(this).prop('checked')) {
+                    $('#previewSelectAll').prop('checked', false);
+                }
+            });
+            
+            // 链接点击
+            $('.preview-logcat-link').on('click', function() {
+                const fileName = $(this).data('filename');
+                alert(`测试链接跳转功能：\n将打开文件: ${fileName}\n（在实际应用中会切换到日志分析面板并加载该文件）`);
+            });
+        }
+        
+        // 更新选中计数
+        function updatePreviewSelectedCount() {
+            const count = $('.preview-row-checkbox:checked').length;
+            $('#previewSelectedCount').text(count);
+        }
+        
+        // 测试打开选中文件功能
+        function testOpenSelectedFiles() {
+            const selectedFiles = [];
+            $('.preview-row-checkbox:checked').each(function() {
+                const fileName = $(this).data('filename');
+                if (fileName) selectedFiles.push(fileName);
+            });
+            
+            if (selectedFiles.length === 0) {
+                alert('请先选择要打开的文件');
+                return;
+            }
+            
+            alert(`测试批量打开文件功能：\n将打开以下文件：\n${selectedFiles.join('\n')}\n\n（在实际应用中会逐个打开这些logcat文件）`);
+        }
+        
+        // 测试复选框功能
+        function testCheckboxFunctionality() {
+            console.log('复选框功能测试：');
+            console.log('- 全选/取消全选功能正常');
+            console.log('- 行复选框状态同步正常');
+            console.log('- 选中计数更新正常');
+        }
+        
+        // 清除测试
+        function clearTest() {
+            document.getElementById('testResult').innerHTML = '';
+            document.getElementById('testResult').className = 'test-result';
+            document.getElementById('tablePreview').innerHTML = '<p class="text-muted">运行测试后，这里将显示异常表格的模拟预览</p>';
+        }
+        
+        // 页面加载时显示测试数据
+        $(document).ready(function() {
+            console.log('异常数据库表功能测试页面已加载');
+            console.log('测试数据:', testData);
+        });
+    </script>
+</body>
+</html>

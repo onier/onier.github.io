@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>原始Log文本显示测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .log {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .description-box {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>原始Log文本显示测试</h1>
+    
+    <div class="test-section">
+        <h2>测试数据</h2>
+        <div class="log" id="testData">
+[2025-12-06 17:31:05.202147] Runtimes:1
+[2025-12-06 17:31:05.202148] Format: Log Type - Time
+[2025-12-06 17:32:17.892147] Runtimes:2
+[2025-12-06 17:32:17.892148] Format: Log Type - Time
+[2025-12-06 17:33:35.032147] Runtimes:3
+[2025-12-06 17:33:35.032148] Format: Log Type - Time
+[2025-12-06 17:34:51.682147] Runtimes:4
+[2025-12-06 17:34:51.682148] Format: Log Type - Time
+[2025-12-06 17:36:10.892147] Runtimes:5
+[2025-12-06 17:36:10.892148] Format: Log Type - Time
+[2025-12-06 17:36:11.892148] Format: Log Type - Time  <!-- 异常：同一个Runtime内有2个Format行 -->
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>1. 测试时间间隔分析描述</h2>
+        <button onclick="testTimeIntervalDescription()">测试时间间隔描述</button>
+        <div id="timeIntervalResult"></div>
+        <div id="timeIntervalDescription" class="description-box" style="display: none;">
+            <!-- 描述内容将通过JavaScript填充 -->
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. 测试异常重启分析描述</h2>
+        <button onclick="testRestartDescription()">测试异常重启描述</button>
+        <div id="restartResult"></div>
+        <div id="restartDescription" class="description-box" style="display: none;">
+            <!-- 描述内容将通过JavaScript填充 -->
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. 完整分析测试</h2>
+        <button onclick="testFullAnalysis()">运行完整分析</button>
+        <div id="fullAnalysisResult"></div>
+        <div id="analysisOutput" class="log" style="display: none;"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试日志</h2>
+        <div id="testLog" class="log"></div>
+    </div>
+
+    <script src="port_log_analyzer.js"></script>
+    
+    <script>
+        let logOutput = '';
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}\n`;
+            logOutput = logEntry + logOutput;
+            document.getElementById('testLog').textContent = logOutput;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        function clearLog() {
+            logOutput = '';
+            document.getElementById('testLog').textContent = '';
+        }
+        
+        // 测试数据 - 包含一个异常重启（Runtime 5有2个Format行）
+        const testPortLogContent = `[2025-12-06 17:31:05.202147] Runtimes:1
+[2025-12-06 17:31:05.202148] Format: Log Type - Time
+[2025-12-06 17:32:17.892147] Runtimes:2
+[2025-12-06 17:32:17.892148] Format: Log Type - Time
+[2025-12-06 17:33:35.032147] Runtimes:3
+[2025-12-06 17:33:35.032148] Format: Log Type - Time
+[2025-12-06 17:34:51.682147] Runtimes:4
+[2025-12-06 17:34:51.682148] Format: Log Type - Time
+[2025-12-06 17:36:10.892147] Runtimes:5
+[2025-12-06 17:36:10.892148] Format: Log Type - Time
+[2025-12-06 17:36:11.892148] Format: Log Type - Time`;
+        
+        function testTimeIntervalDescription() {
+            clearLog();
+            log('开始测试时间间隔分析描述...');
+            
+            try {
+                if (!window.PortLogAnalyzer) {
+                    throw new Error('PortLogAnalyzer 未加载');
+                }
+                
+                const analyzer = new window.PortLogAnalyzer();
+                log('✓ PortLogAnalyzer 实例创建成功');
+                
+                const result = analyzer.parsePortLogFile(testPortLogContent);
+                log(`✓ 解析成功，找到 ${result.runtimes.length} 个Runtimes`);
+                
+                const tableData = analyzer.getTableData();
+                log(`✓ 获取表格数据成功，时间间隔表格: ${tableData.timeIntervalTable.length} 行`);
+                
+                // 检查第一行时间间隔的描述
+                const firstInterval = tableData.timeIntervalTable[0];
+                if (firstInterval && firstInterval.描述) {
+                    const description = firstInterval.描述;
+                    
+                    // 显示描述
+                    document.getElementById('timeIntervalDescription').innerHTML = description;
+                    document.getElementById('timeIntervalDescription').style.display = 'block';
+                    
+                    // 检查是否包含原始log文本
+                    const hasFromRuntime = description.includes('FromRuntime 1:');
+                    const hasToRuntime = description.includes('ToRuntime 2:');
+                    const hasRawLogText = description.includes('原始log文本');
+                    
+                    log(`✓ 描述包含FromRuntime: ${hasFromRuntime}`);
+                    log(`✓ 描述包含ToRuntime: ${hasToRuntime}`);
+                    log(`✓ 描述包含"原始log文本": ${hasRawLogText}`);
+                    
+                    if (hasFromRuntime && hasToRuntime && hasRawLogText) {
+                        document.getElementById('timeIntervalResult').innerHTML = 
+                            '<div class="success">✓ 时间间隔描述测试通过！描述中包含原始log文本。</div>';
+                    } else {
+                        document.getElementById('timeIntervalResult').innerHTML = 
+                            '<div class="error">✗ 时间间隔描述测试失败：描述中缺少原始log文本</div>';
+                    }
+                } else {
+                    throw new Error('无法获取时间间隔描述');
+                }
+                
+            } catch (error) {
+                log(`✗ 测试失败: ${error.message}`, 'error');
+                document.getElementById('timeIntervalResult').innerHTML = 
+                    `<div class="error">✗ 时间间隔描述测试失败: ${error.message}</div>`;
+            }
+        }
+        
+        function testRestartDescription() {
+            clearLog();
+            log('开始测试异常重启分析描述...');
+            
+            try {
+                if (!window.PortLogAnalyzer) {
+                    throw new Error('PortLogAnalyzer 未加载');
+                }
+                
+                const analyzer = new window.PortLogAnalyzer();
+                log('✓ PortLogAnalyzer 实例创建成功');
+                
+                const result = analyzer.parsePortLogFile(testPortLogContent);
+                log(`✓ 解析成功，找到 ${result.runtimes.length} 个Runtimes`);
+                
+                const tableData = analyzer.getTableData();
+                log(`✓ 获取表格数据成功，重启表格: ${tableData.restartTable.length} 行`);
+                
+                // 检查异常重启的描述
+                if (tableData.restartTable.length > 0) {
+                    const firstRestart = tableData.restartTable[0];
+                    const description = firstRestart.描述;
+                    
+                    // 显示描述
+                    document.getElementById('restartDescription').innerHTML = description;
+                    document.getElementById('restartDescription').style.display = 'block';
+                    
+                    // 检查是否包含原始log文本
+                    const hasFormatLines = description.includes('原始Format行内容');
+                    const hasLineContent = description.includes('Format: Log Type - Time');
+                    const hasMultipleLines = (description.match(/Format: Log Type - Time/g) || []).length >= 2;
+                    
+                    log(`✓ 描述包含"原始Format行内容": ${hasFormatLines}`);
+                    log(`✓ 描述包含Format行文本: ${hasLineContent}`);
+                    log(`✓ 描述包含多个Format行: ${hasMultipleLines}`);
+                    
+                    if (hasFormatLines && hasLineContent && hasMultipleLines) {
+                        document.getElementById('restartResult').innerHTML = 
+                            '<div class="success">✓ 异常重启描述测试通过！描述中包含原始log文本。</div>';
+                    } else {
+                        document.getElementById('restartResult').innerHTML = 
+                            '<div class="error">✗ 异常重启描述测试失败：描述中缺少原始log文本</div>';
+                    }
+                } else {
+                    // 如果没有异常重启，检查正常情况
+                    const analysis = analyzer.portLogAnalysis;
+                    log(`分析结果: ${analysis.abnormalRestarts.length} 个异常重启`);
+                    
+                    if (analysis.abnormalRestarts.length === 0) {
+                        document.getElementById('restartResult').innerHTML = 
+                            '<div class="error">✗ 测试数据中没有检测到异常重启，请确保测试数据包含多个Format行</div>';
+                    }
+                }
+                
+            } catch (error) {
+                log(`✗ 测试失败: ${error.message}`, 'error');
+                document.getElementById('restartResult').innerHTML = 
+                    `<div class="error">✗ 异常重启描述测试失败: ${error.message}</div>`;
+            }
+        }
+        
+        function testFullAnalysis() {
+            clearLog();
+            log('开始运行完整分析测试...');
+            
+            try {
+                if (!window.PortLogAnalyzer) {
+                    throw new Error('PortLogAnalyzer 未加载');
+                }
+                
+                const analyzer = new window.PortLogAnalyzer();
+                log('✓ PortLogAnalyzer 实例创建成功');
+                
+                const result = analyzer.parsePortLogFile(testPortLogContent);
+                log(`✓ 解析成功，找到 ${result.runtimes.length} 个Runtimes`);
+                
+                const tableData = analyzer.getTableData();
+                log(`✓ 获取表格数据成功`);
+                
+                // 显示完整分析结果
+                let output = '=== 完整分析结果 ===\n\n';
+                
+                output += '1. 时间间隔分析:\n';
+                tableData.timeIntervalTable.forEach((interval, index) => {
+                    output += `\n间隔 ${index + 1}:\n`;
+                    output += `  状态: ${interval.状态}\n`;
+                    output += `  描述: ${interval.描述}\n`;
+                });
+                
+                output += '\n\n2. 异常重启分析:\n';
+                if (tableData.restartTable.length > 0) {
+                    tableData.restartTable.forEach((restart, index) => {
+                        output += `\n异常重启 ${index + 1}:\n`;
+                        output += `  Runtime: ${restart.Runtime}\n`;
+                        output += `  Format次数: ${restart.Format次数}\n`;
+                        output += `  描述: ${restart.描述}\n`;
+                    });
+                } else {
+                    output += '  没有检测到异常重启\n';
+                }
+                
+                output += '\n\n3. 统计信息:\n';
+                Object.entries(tableData.stats).forEach(([key, value]) => {
+                    output += `  ${key}: ${value}\n`;
+                });
+                
+                document.getElementById('analysisOutput').textContent = output;
+                document.getElementById('analysisOutput').style.display = 'block';
+                
+                // 检查描述是否包含原始log文本
+                let allDescriptionsHaveRawLog = true;
+                let issues = [];
+                
+                // 检查时间间隔描述
+                tableData.timeIntervalTable.forEach((interval, index) => {
+                    if (!interval.描述.includes('原始log文本')) {
+                        allDescriptionsHaveRawLog = false;
+                        issues.push(`时间间隔 ${index + 1} 的描述缺少"原始log文本"`);
+                    }
+                    if (!interval.描述.includes('FromRuntime') || !interval.描述.includes('ToRuntime')) {
+                        allDescriptionsHaveRawLog = false;
+                        issues.push(`时间间隔 ${index + 1} 的描述缺少Runtime信息`);
+                    }
+                });
+                
+                // 检查异常重启描述
+                tableData.restartTable.forEach((restart, index) => {
+                    if (!restart.描述.includes('原始Format行内容')) {
+                        allDescriptionsHaveRawLog = false;
+                        issues.push(`异常重启 ${index + 1} 的描述缺少"原始Format行内容"`);
+                    }
+                });
+                
+                if (allDescriptionsHaveRawLog) {
+                    document.getElementById('fullAnalysisResult').innerHTML = 
+                        '<div class="success">✓ 完整分析测试通过！所有描述都包含原始log文本。</div>';
+                    log('✓ 所有描述都包含原始log文本');
+                } else {
+                    document.getElementById('fullAnalysisResult').innerHTML = 
+                        `<div class="error">✗ 完整分析测试失败：\n${issues.join('\n')}</div>`;
+                    issues.forEach(issue => log(`✗ ${issue}`, 'error'));
+                }
+                
+            } catch (error) {
+                log(`✗ 测试失败: ${error.message}`, 'error');
+                document.getElementById('fullAnalysisResult').innerHTML = 
+                    `<div class="error">✗ 完整分析测试失败: ${error.message}</div>`;
+            }
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            log('测试页面加载完成');
+            log('点击上面的按钮开始测试');
+        });
+    </script>
+</body>
+</html>

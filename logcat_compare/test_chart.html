@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>温度-开机时间图表测试</title>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .chart-container {
+            position: relative;
+            height: 500px;
+            margin: 20px 0;
+        }
+        .test-data {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>温度-开机时间图表测试</h1>
+        
+        <div class="test-data">
+            <h3>测试数据</h3>
+            <p>模拟ResultLog.txt数据，包含Temp和PowerOnTime字段</p>
+            <pre id="testData"></pre>
+        </div>
+        
+        <div class="chart-container">
+            <canvas id="testChart"></canvas>
+        </div>
+        
+        <div>
+            <button onclick="loadTestData()">加载测试数据</button>
+            <button onclick="clearChart()">清空图表</button>
+        </div>
+    </div>
+
+    <script>
+        let testChart = null;
+        
+        // 模拟测试数据
+        const testData = [
+            { LocalTime: "[2025-10-30 16:06:04,106]", Runtimes: "1", Temp: "25.5", PowerOnTime: "1200" },
+            { LocalTime: "[2025-10-30 16:06:05,206]", Runtimes: "2", Temp: "26.0", PowerOnTime: "1250" },
+            { LocalTime: "[2025-10-30 16:06:06,306]", Runtimes: "3", Temp: "26.5", PowerOnTime: "1300" },
+            { LocalTime: "[2025-10-30 16:06:07,406]", Runtimes: "4", Temp: "27.0", PowerOnTime: "1350" },
+            { LocalTime: "[2025-10-30 16:06:08,506]", Runtimes: "5", Temp: "27.5", PowerOnTime: "1400" },
+            { LocalTime: "[2025-10-30 16:06:09,606]", Runtimes: "6", Temp: "28.0", PowerOnTime: "1450" },
+            { LocalTime: "[2025-10-30 16:06:10,706]", Runtimes: "7", Temp: "28.5", PowerOnTime: "1500" },
+            { LocalTime: "[2025-10-30 16:06:11,806]", Runtimes: "8", Temp: "29.0", PowerOnTime: "1550" },
+            { LocalTime: "[2025-10-30 16:06:12,906]", Runtimes: "9", Temp: "29.5", PowerOnTime: "1600" },
+            { LocalTime: "[2025-10-30 16:06:13,006]", Runtimes: "10", Temp: "30.0", PowerOnTime: "1650" },
+            // 添加一个异常点（>最小时间+20秒 = 1200 + 20000 = 21200）
+            { LocalTime: "[2025-10-30 16:06:14,106]", Runtimes: "11", Temp: "30.5", PowerOnTime: "25000" },
+            // 再添加一个正常点
+            { LocalTime: "[2025-10-30 16:06:15,206]", Runtimes: "12", Temp: "31.0", PowerOnTime: "1700" }
+        ];
+        
+        // 显示测试数据
+        document.getElementById('testData').textContent = JSON.stringify(testData, null, 2);
+        
+        function initChart() {
+            const ctx = document.getElementById('testChart').getContext('2d');
+            
+            testChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: '开机时间 vs 温度',
+                        data: [],
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 1,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        fill: false,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '温度-开机时间趋势分析 (测试)'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: (context) => {
+                                    const point = context.dataset.data[context.dataIndex];
+                                    if (point.custom) {
+                                        return [
+                                            `本地时间: ${point.custom.localTime}`,
+                                            `运行次数: ${point.custom.runtimes}`,
+                                            `温度: ${point.x}°C`,
+                                            `开机时间: ${point.y}ms`,
+                                            point.custom.isAnomaly ? '⚠️ 异常点（>最小时间+20s）' : ''
+                                        ];
+                                    }
+                                    return `温度: ${point.x}°C, 开机时间: ${point.y}ms`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: {
+                                display: true,
+                                text: '温度 (°C)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: '开机时间 (ms)'
+                            },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+        
+        function prepareChartData(allResultDatas) {
+            // 过滤有效数据
+            const validData = allResultDatas.filter(item => {
+                return item.Temp !== undefined && item.PowerOnTime !== undefined &&
+                       !isNaN(parseFloat(item.Temp)) && !isNaN(parseFloat(item.PowerOnTime));
+            });
+
+            if (validData.length === 0) {
+                return { data: [] };
+            }
+
+            // 提取开机时间并计算最小值和异常阈值
+            const powerOnTimes = validData.map(item => parseFloat(item.PowerOnTime));
+            const minTime = Math.min(...powerOnTimes);
+            const anomalyThreshold = minTime + 20000; // 20秒 = 20000毫秒
+
+            // 准备图表数据点
+            const dataPoints = validData.map(item => {
+                const temp = parseFloat(item.Temp);
+                const powerOnTime = parseFloat(item.PowerOnTime);
+                const isAnomaly = powerOnTime > anomalyThreshold;
+                
+                return {
+                    x: temp,
+                    y: powerOnTime,
+                    custom: {
+                        localTime: item.LocalTime || 'N/A',
+                        runtimes: item.Runtimes || 'N/A',
+                        temp: temp,
+                        powerOnTime: powerOnTime,
+                        isAnomaly: isAnomaly
+                    }
+                };
+            });
+
+            // 按温度排序
+            dataPoints.sort((a, b) => a.x - b.x);
+
+            return {
+                data: dataPoints,
+                stats: {
+                    minTime: minTime,
+                    anomalyThreshold: anomalyThreshold,
+                    anomalyCount: dataPoints.filter(p => p.custom.isAnomaly).length
+                }
+            };
+        }
+        
+        function loadTestData() {
+            if (!testChart) {
+                initChart();
+            }
+            
+            const chartData = prepareChartData(testData);
+            testChart.data.datasets[0].data = chartData.data;
+            
+            // 设置异常点颜色
+            testChart.data.datasets[0].pointBackgroundColor = chartData.data.map(point => {
+                return point.custom.isAnomaly ? 'rgba(255, 99, 132, 1)' : 'rgba(54, 162, 235, 1)';
+            });
+            
+            testChart.update();
+            
+            console.log('图表数据已加载:', chartData);
+            console.log('最小开机时间:', chartData.stats.minTime, 'ms');
+            console.log('异常阈值:', chartData.stats.anomalyThreshold, 'ms');
+            console.log('异常点数量:', chartData.stats.anomalyCount);
+        }
+        
+        function clearChart() {
+            if (testChart) {
+                testChart.data.datasets[0].data = [];
+                testChart.update();
+            }
+        }
+        
+        // 页面加载时初始化图表
+        document.addEventListener('DOMContentLoaded', initChart);
+    </script>
+</body>
+</html>

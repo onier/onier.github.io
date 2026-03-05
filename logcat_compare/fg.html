@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perf 火焰图可视化工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .container {
+            max-width: 100%;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 30px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: #888;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(56, 239, 125, 0.4);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(245, 87, 108, 0.4);
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 5px 15px;
+        }
+
+        .search-box input {
+            background: transparent;
+            border: none;
+            color: white;
+            padding: 10px;
+            font-size: 14px;
+            width: 200px;
+            outline: none;
+        }
+
+        .search-box input::placeholder {
+            color: #888;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .stats {
+            display: flex;
+            gap: 30px;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #48dbfb;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        #flamegraph-container {
+            padding: 20px;
+            overflow-x: auto;
+            min-height: 500px;
+        }
+
+        #flamegraph {
+            min-width: 100%;
+        }
+
+        .flame-row {
+            display: flex;
+            width: 100%;
+            height: 20px;
+            margin-bottom: 1px;
+        }
+
+        .flame-block {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            color: white;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: filter 0.2s;
+            border-right: 1px solid rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+
+        .flame-block:hover {
+            filter: brightness(1.2);
+        }
+
+        .flame-block.highlight {
+            outline: 2px solid #fff;
+            outline-offset: -2px;
+            z-index: 10;
+        }
+
+        .flame-block.dimmed {
+            opacity: 0.3;
+        }
+
+        .tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.95);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 13px;
+            max-width: 500px;
+            z-index: 1000;
+            pointer-events: none;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tooltip-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            word-break: break-all;
+            color: #48dbfb;
+        }
+
+        .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+        }
+
+        .tooltip-label {
+            color: #888;
+        }
+
+        .tooltip-value {
+            font-weight: 600;
+            color: #feca57;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+            color: #666;
+        }
+
+        .empty-state svg {
+            width: 120px;
+            height: 120px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+            color: #888;
+        }
+
+        .empty-state p {
+            color: #666;
+        }
+
+        .legend {
+            display: flex;
+            gap: 20px;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.02);
+            flex-wrap: wrap;
+            justify-content: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+        }
+
+        .breadcrumb {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 13px;
+            display: none;
+        }
+
+        .breadcrumb.active {
+            display: block;
+        }
+
+        .breadcrumb span {
+            color: #48dbfb;
+            cursor: pointer;
+        }
+
+        .breadcrumb span:hover {
+            text-decoration: underline;
+        }
+
+        .zoom-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .zoom-controls button {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s;
+        }
+
+        .zoom-controls button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8em;
+            }
+
+            .controls {
+                flex-direction: column;
+            }
+
+            .search-box input {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🔥 Perf 火焰图可视化</h1>
+        <p>支持 simpleperf 格式的性能数据分析</p>
+    </header>
+
+    <div class="controls">
+        <input type="file" id="fileInput" accept=".txt,.data,.perf">
+        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+            📁 导入 Perf 数据
+        </button>
+        <button class="btn btn-success" onclick="exportSVG()">
+            💾 导出 SVG
+        </button>
+        <button class="btn btn-warning" onclick="resetView()">
+            🔄 重置视图
+        </button>
+        <div class="search-box">
+            <span>🔍</span>
+            <input type="text" id="searchInput" placeholder="搜索函数名..." oninput="searchFunction(this.value)">
+        </div>
+        <div class="zoom-controls">
+            <button onclick="zoomIn()">+</button>
+            <span id="zoomLevel">100%</span>
+            <button onclick="zoomOut()">-</button>
+        </div>
+    </div>
+
+    <div class="stats" id="stats" style="display: none;">
+        <div class="stat-item">
+            <div class="stat-value" id="totalSamples">0</div>
+            <div class="stat-label">总采样数</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="totalEvents">0</div>
+            <div class="stat-label">事件计数</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="duration">0s</div>
+            <div class="stat-label">采样时长</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="arch">-</div>
+            <div class="stat-label">架构</div>
+        </div>
+    </div>
+
+    <div class="breadcrumb" id="breadcrumb">
+        <span onclick="resetView()">全部</span>
+    </div>
+
+    <div id="flamegraph-container">
+        <div id="flamegraph">
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+                <h3>暂无数据</h3>
+                <p>点击"导入 Perf 数据"按钮加载性能分析文件</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="legend" id="legend" style="display: none;">
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(135deg, #ff6b6b, #ee5a5a);"></div>
+            <span>内核函数</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(135deg, #feca57, #f9ca24);"></div>
+            <span>用户空间</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(135deg, #48dbfb, #0abde3);"></div>
+            <span>库函数</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(135deg, #a55eea, #8854d0);"></div>
+            <span>驱动模块</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(135deg, #26de81, #20bf6b);"></div>
+            <span>Java/ART</span>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip" style="display: none;"></div>
+
+    <script>
+        // 全局状态
+        let perfData = null;
+        let flameData = null;
+        let currentZoom = 100;
+        let currentRoot = null;
+        let tooltip = document.getElementById('tooltip');
+
+        // 颜色方案
+        const colorSchemes = {
+            kernel: ['#ff6b6b', '#ee5a5a', '#fc5c65', '#eb3b5a'],
+            user: ['#feca57', '#f9ca24', '#fed330', '#f7b731'],
+            lib: ['#48dbfb', '#0abde3', '#45aaf2', '#2d98da'],
+            driver: ['#a55eea', '#8854d0', '#9b59b6', '#8e44ad'],
+            java: ['#26de81', '#20bf6b', '#2ecc71', '#27ae60'],
+            default: ['#778ca3', '#636e72', '#95a5a6', '#7f8c8d']
+        };
+
+        // 文件输入处理
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    parseAndRender(e.target.result);
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // 解析 perf 数据
+        function parseAndRender(text) {
+            perfData = parsePerfData(text);
+            flameData = buildFlameGraph(perfData);
+            renderFlameGraph(flameData);
+            updateStats(perfData);
+            document.getElementById('stats').style.display = 'flex';
+            document.getElementById('legend').style.display = 'flex';
+        }
+
+        // 解析 simpleperf 格式数据
+        function parsePerfData(text) {
+            const lines = text.split('\n');
+            const data = {
+                cmdline: '',
+                arch: '',
+                event: '',
+                samples: 0,
+                eventCount: 0,
+                duration: 0,
+                stacks: []
+            };
+
+            // 解析头部信息
+            for (let i = 0; i < Math.min(10, lines.length); i++) {
+                const line = lines[i];
+                if (line.startsWith('Cmdline:')) {
+                    data.cmdline = line.substring(8).trim();
+                    const durationMatch = data.cmdline.match(/--duration\s+(\d+)/);
+                    if (durationMatch) {
+                        data.duration = parseInt(durationMatch[1]);
+                    }
+                } else if (line.startsWith('Arch:')) {
+                    data.arch = line.substring(5).trim();
+                } else if (line.startsWith('Event:')) {
+                    data.event = line.substring(6).trim();
+                } else if (line.startsWith('Samples:')) {
+                    data.samples = parseInt(line.substring(8).trim());
+                } else if (line.startsWith('Event count:')) {
+                    data.eventCount = parseInt(line.substring(12).trim());
+                }
+            }
+
+            // 解析调用栈数据
+            let currentStack = null;
+            let inCallGraph = false;
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                // 检测主条目行 (包含 Children Self Command 等)
+                const mainMatch = line.match(/^\s*(\d+\.?\d*%)\s+(\d+\.?\d*%)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/);
+                if (mainMatch) {
+                    if (currentStack) {
+                        data.stacks.push(currentStack);
+                    }
+                    currentStack = {
+                        children: parseFloat(mainMatch[1]),
+                        self: parseFloat(mainMatch[2]),
+                        command: mainMatch[3],
+                        pid: parseInt(mainMatch[4]),
+                        tid: parseInt(mainMatch[5]),
+                        sharedObject: mainMatch[6],
+                        symbol: mainMatch[7].trim(),
+                        callchain: []
+                    };
+                    inCallGraph = false;
+                    continue;
+                }
+
+                // 解析调用链
+                if (currentStack && (line.includes('--') || line.includes('|'))) {
+                    const callMatch = line.match(/(?:--|[\|\s]+)(\d+\.?\d*%)?--?\s*(.+)/);
+                    if (callMatch) {
+                        const func = callMatch[2].trim();
+                        const percent = callMatch[1] ? parseFloat(callMatch[1]) : 0;
+                        if (func && !func.startsWith('[skipped') && !func.startsWith('[hit in')) {
+                            currentStack.callchain.push({
+                                function: func,
+                                percent: percent
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (currentStack) {
+                data.stacks.push(currentStack);
+            }
+
+            return data;
+        }
+
+        // 构建火焰图数据结构
+        function buildFlameGraph(data) {
+            const root = {
+                name: 'root',
+                value: 100,
+                children: {},
+                depth: 0
+            };
+
+            data.stacks.forEach(stack => {
+                if (stack.children < 0.1) return; // 过滤太小的项
+
+                let current = root;
+                const chain = [stack.symbol, ...stack.callchain.map(c => c.function)];
+                
+                chain.forEach((func, idx) => {
+                    if (!func || func === '[hit in function]') return;
+                    
+                    const cleanFunc = func.replace(/\s*\[.*?\]\s*/g, ' ').trim();
+                    
+                    if (!current.children[cleanFunc]) {
+                        current.children[cleanFunc] = {
+                            name: cleanFunc,
+                            value: 0,
+                            children: {},
+                            depth: idx + 1,
+                            sharedObject: stack.sharedObject,
+                            command: stack.command
+                        };
+                    }
+                    current.children[cleanFunc].value += stack.children;
+                    current = current.children[cleanFunc];
+                });
+            });
+
+            return root;
+        }
+
+        // 渲染火焰图
+        function renderFlameGraph(node, container = null) {
+            if (!container) {
+                container = document.getElementById('flamegraph');
+                container.innerHTML = '';
+            }
+
+            currentRoot = node;
+            const maxDepth = getMaxDepth(node);
+            const rows = [];
+
+            // 按层级收集节点
+            function collectByDepth(n, depth = 0) {
+                if (!rows[depth]) rows[depth] = [];
+                
+                const children = Object.values(n.children).sort((a, b) => b.value - a.value);
+                children.forEach(child => {
+                    rows[depth].push(child);
+                    collectByDepth(child, depth + 1);
+                });
+            }
+
+            collectByDepth(node);
+
+            // 渲染每一层
+            rows.forEach((row, depth) => {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'flame-row';
+                rowDiv.style.height = '22px';
+
+                row.forEach(item => {
+                    const block = document.createElement('div');
+                    block.className = 'flame-block';
+                    block.style.width = `${Math.max(item.value, 0.5)}%`;
+                    block.style.background = getColor(item);
+                    block.textContent = item.value > 3 ? truncate(item.name, Math.floor(item.value * 2)) : '';
+                    block.dataset.name = item.name;
+                    block.dataset.value = item.value.toFixed(2);
+                    block.dataset.sharedObject = item.sharedObject || '';
+                    block.dataset.command = item.command || '';
+
+                    block.addEventListener('mouseenter', showTooltip);
+                    block.addEventListener('mouseleave', hideTooltip);
+                    block.addEventListener('mousemove', moveTooltip);
+                    block.addEventListener('click', () => zoomToNode(item));
+
+                    rowDiv.appendChild(block);
+                });
+
+                container.appendChild(rowDiv);
+            });
+
+            // 如果没有数据，显示空状态
+            if (rows.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>无法解析数据</h3>
+                        <p>请确保文件格式正确</p>
+                    </div>
+                `;
+            }
+        }
+
+        // 获取最大深度
+        function getMaxDepth(node, depth = 0) {
+            let max = depth;
+            Object.values(node.children).forEach(child => {
+                max = Math.max(max, getMaxDepth(child, depth + 1));
+            });
+            return max;
+        }
+
+        // 获取颜色
+        function getColor(node) {
+            const name = node.name.toLowerCase();
+            const so = (node.sharedObject || '').toLowerCase();
+            
+            let scheme;
+            if (so.includes('kernel') || name.includes('el1h_64') || name.includes('irq')) {
+                scheme = colorSchemes.kernel;
+            } else if (so.includes('.ko') || so.includes('driver')) {
+                scheme = colorSchemes.driver;
+            } else if (so.includes('libc') || so.includes('lib64') || so.includes('.so')) {
+                scheme = colorSchemes.lib;
+            } else if (so.includes('art') || so.includes('.oat') || so.includes('.jar')) {
+                scheme = colorSchemes.java;
+            } else if (so.includes('bin/') || node.command) {
+                scheme = colorSchemes.user;
+            } else {
+                scheme = colorSchemes.default;
+            }
+
+            // 基于名称哈希选择颜色
+            const hash = hashCode(node.name);
+            const color = scheme[Math.abs(hash) % scheme.length];
+            return color;
+        }
+
+        // 字符串哈希
+        function hashCode(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0;
+            }
+            return hash;
+        }
+
+        // 截断文本
+        function truncate(str, maxLen) {
+            if (str.length <= maxLen) return str;
+            return str.substring(0, maxLen - 2) + '..';
+        }
+
+        // 显示提示框
+        function showTooltip(e) {
+            const block = e.target;
+            tooltip.innerHTML = `
+                <div class="tooltip-title">${block.dataset.name}</div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">占比:</span>
+                    <span class="tooltip-value">${block.dataset.value}%</span>
+                </div>
+                ${block.dataset.sharedObject ? `
+                <div class="tooltip-row">
+                    <span class="tooltip-label">模块:</span>
+                    <span class="tooltip-value">${block.dataset.sharedObject}</span>
+                </div>
+                ` : ''}
+                ${block.dataset.command ? `
+                <div class="tooltip-row">
+                    <span class="tooltip-label">进程:</span>
+                    <span class="tooltip-value">${block.dataset.command}</span>
+                </div>
+                ` : ''}
+            `;
+            tooltip.style.display = 'block';
+        }
+
+        // 隐藏提示框
+        function hideTooltip() {
+            tooltip.style.display = 'none';
+        }
+
+        // 移动提示框
+        function moveTooltip(e) {
+            const x = e.clientX + 15;
+            const y = e.clientY + 15;
+            tooltip.style.left = `${Math.min(x, window.innerWidth - tooltip.offsetWidth - 20)}px`;
+            tooltip.style.top = `${Math.min(y, window.innerHeight - tooltip.offsetHeight - 20)}px`;
+        }
+
+        // 缩放到节点
+        function zoomToNode(node) {
+            const container = document.getElementById('flamegraph');
+            container.innerHTML = '';
+            
+            // 更新面包屑
+            const breadcrumb = document.getElementById('breadcrumb');
+            breadcrumb.classList.add('active');
+            breadcrumb.innerHTML = `<span onclick="resetView()">全部</span> → <span>${truncate(node.name, 50)}</span>`;
+            
+            // 重新计算百分比
+            const scaledNode = scaleNode(node, 100 / node.value);
+            renderFlameGraph(scaledNode, container);
+        }
+
+        // 缩放节点值
+        function scaleNode(node, factor) {
+            const scaled = {
+                ...node,
+                value: node.value * factor,
+                children: {}
+            };
+            Object.entries(node.children).forEach(([key, child]) => {
+                scaled.children[key] = scaleNode(child, factor);
+            });
+            return scaled;
+        }
+
+        // 重置视图
+        function resetView() {
+            if (flameData) {
+                const container = document.getElementById('flamegraph');
+                container.innerHTML = '';
+                renderFlameGraph(flameData, container);
+                document.getElementById('breadcrumb').classList.remove('active');
+                document.getElementById('searchInput').value = '';
+                clearHighlight();
+            }
+        }
+
+        // 搜索函数
+        function searchFunction(query) {
+            const blocks = document.querySelectorAll('.flame-block');
+            
+            if (!query) {
+                clearHighlight();
+                return;
+            }
+
+            const lowerQuery = query.toLowerCase();
+            blocks.forEach(block => {
+                const name = block.dataset.name.toLowerCase();
+                if (name.includes(lowerQuery)) {
+                    block.classList.add('highlight');
+                    block.classList.remove('dimmed');
+                } else {
+                    block.classList.remove('highlight');
+                    block.classList.add('dimmed');
+                }
+            });
+        }
+
+        // 清除高亮
+        function clearHighlight() {
+            document.querySelectorAll('.flame-block').forEach(block => {
+                block.classList.remove('highlight', 'dimmed');
+            });
+        }
+
+        // 更新统计信息
+        function updateStats(data) {
+            document.getElementById('totalSamples').textContent = data.samples.toLocaleString();
+            document.getElementById('totalEvents').textContent = formatNumber(data.eventCount);
+            document.getElementById('duration').textContent = `${data.duration}s`;
+            document.getElementById('arch').textContent = data.arch || '-';
+        }
+
+        // 格式化数字
+        function formatNumber(num) {
+            if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+            if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+            if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
+            return num.toString();
+        }
+
+        // 缩放控制
+        function zoomIn() {
+            currentZoom = Math.min(200, currentZoom + 20);
+            applyZoom();
+        }
+
+        function zoomOut() {
+            currentZoom = Math.max(50, currentZoom - 20);
+            applyZoom();
+        }
+
+        function applyZoom() {
+            const container = document.getElementById('flamegraph');
+            container.style.transform = `scale(${currentZoom / 100})`;
+            container.style.transformOrigin = 'top left';
+            document.getElementById('zoomLevel').textContent = `${currentZoom}%`;
+        }
+
+        // 导出 SVG
+        function exportSVG() {
+            if (!flameData) {
+                alert('请先导入数据');
+                return;
+            }
+
+            const container = document.getElementById('flamegraph');
+            const rows = container.querySelectorAll('.flame-row');
+            
+            let svgContent = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="${rows.length * 24 + 40}" viewBox="0 0 1200 ${rows.length * 24 + 40}">
+<style>
+    text { font-family: monospace; font-size: 11px; fill: white; }
+    rect { stroke: rgba(0,0,0,0.2); stroke-width: 0.5; }
+</style>
+<rect width="100%" height="100%" fill="#1a1a2e"/>
+<text x="10" y="25" fill="#48dbfb" font-size="16">Perf Flame Graph</text>
+`;
+            let y = 40;
+            rows.forEach(row => {
+                let x = 0;
+                row.querySelectorAll('.flame-block').forEach(block => {
+                    const width = parseFloat(block.style.width) * 12; // 1200 / 100
+                    const color = window.getComputedStyle(block).backgroundColor;
+                    const name = block.dataset.name;
+                    
+                    svgContent += `<rect x="${x}" y="${y}" width="${width}" height="22" fill="${color}" rx="2"/>`;
+                    if (width > 30) {
+                        svgContent += `<text x="${x + 4}" y="${y + 15}">${escapeXml(truncate(name, Math.floor(width / 7)))}</text>`;
+                    }
+                    x += width;
+                });
+                y += 24;
+            });
+
+            svgContent += '</svg>';
+
+            const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'flamegraph.svg';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // XML 转义
+        function escapeXml(str) {
+            return str.replace(/[<>&'"]/g, c => ({
+                '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;'
+            })[c]);
+        }
+
+        // 拖放支持
+        document.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        document.addEventListener('drop', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = e => parseAndRender(e.target.result);
+                reader.readAsText(file);
+            }
+        });
+
+        // 键盘快捷键
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                resetView();
+            } else if (e.key === '+' || e.key === '=') {
+                zoomIn();
+            } else if (e.key === '-') {
+                zoomOut();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,523 @@
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        /* --- 顶部主工具栏 --- */
+        #toolbar {
+            height: 40px;
+            background-color: #f3f3f3;
+            border-bottom: 1px solid #e1e1e1;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            gap: 15px;
+            color: #333;
+            flex-shrink: 0;
+        }
+
+        .toggle-group {
+            display: flex;
+            gap: 5px;
+            border-right: 1px solid #ccc;
+            padding-right: 15px;
+            align-items: center;
+        }
+
+        .toggle-label {
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 4px;
+        }
+
+        .toggle-btn {
+            background-color: #007acc;
+            color: white;
+            border: none;
+            padding: 5px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 2px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+
+        .toggle-btn.active {
+            opacity: 1;
+            font-weight: bold;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        .toggle-btn:hover {
+            opacity: 0.8;
+        }
+
+        /* 搜索区域 */
+        .search-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+
+        #filter-input {
+            padding: 5px 8px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 13px;
+            width: 400px;
+            outline: none;
+            font-family: 'Consolas', monospace;
+            transition: border-color 0.2s;
+        }
+
+        #filter-input:focus {
+            border-color: #007acc;
+            box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
+        }
+
+        #filter-input.error {
+            border-color: #d00000;
+            background-color: #fff0f0;
+            color: #d00000;
+        }
+
+        .filter-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .filter-btn:hover {
+            background-color: #218838;
+        }
+
+        .filter-btn:active {
+            transform: translateY(1px);
+        }
+
+        /* --- 编辑器布局 --- */
+        #layout-grid {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            width: 100%;
+            position: relative;
+            background-color: #fff;
+        }
+
+        .editor-container {
+            position: relative;
+            box-sizing: border-box;
+            border: 1px solid #e1e1e1;
+            overflow: hidden;
+            width: 50%;
+            height: 50%;
+            transition: border-color 0.2s;
+        }
+
+        .editor-container.drag-active {
+            border: 2px dashed #007acc !important;
+        }
+
+        .editor-container.drag-active::after {
+            content: "\1F4C2 松开鼠标以打开文件";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.85);
+            color: #007acc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            z-index: 100;
+            pointer-events: none;
+            backdrop-filter: blur(2px);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* --- 悬浮迷你工具栏 --- */
+        .editor-mini-toolbar {
+            position: absolute;
+            top: 0;
+            right: 18px;
+            z-index: 20;
+            background: #e8f0fe;
+            border: 1px solid #d0e3fb;
+            border-top: none;
+            padding: 3px 8px;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            max-width: 80%;
+        }
+
+        .editor-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #007acc;
+            margin-right: 8px;
+            user-select: none;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .mini-separator {
+            width: 1px;
+            height: 14px;
+            background-color: #ccc;
+            margin: 0 2px;
+            flex-shrink: 0;
+        }
+
+        .mini-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 1px 3px;
+            border-radius: 3px;
+            line-height: 1;
+            opacity: 0.7;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .mini-btn:hover {
+            background-color: #d0e3fb;
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        .mini-toggle {
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 4px;
+            border: 1px solid #b0c4de;
+            background-color: #fff;
+            color: #666;
+            border-radius: 3px;
+            cursor: pointer;
+            line-height: 1;
+            min-width: 18px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .mini-toggle:hover {
+            border-color: #007acc;
+            color: #007acc;
+        }
+
+        .mini-toggle.active {
+            background-color: #007acc;
+            color: white;
+            border-color: #005a9e;
+        }
+
+        /* --- 时间差样式 --- */
+        .time-diff-gutter {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 8px;
+            font-size: 10px;
+            font-family: 'Consolas', monospace;
+            color: #888888;
+            opacity: 1;
+            white-space: pre;
+            background-color: #fafafa;
+            border-right: 1px solid #eee;
+        }
+
+        .time-diff-long {
+            color: #d00000 !important;
+            font-weight: bold;
+        }
+
+        /* --- 增强折叠标记样式 --- */
+        .monaco-editor .view-line span.inline-folded {
+            background-color: #fff3cd;
+            border: 1px solid #ffecb5;
+            color: #856404 !important;
+            padding: 0 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-left: 5px;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            display: inline-block;
+        }
+
+        .monaco-editor .view-line span.inline-folded::after {
+            content: " ↔ (折叠区域)";
+            font-size: 11px;
+            opacity: 0.8;
+            margin-left: 4px;
+        }
+
+        .monaco-editor .view-line span.inline-folded:hover {
+            background-color: #ffecb5;
+            border-color: #ffeeba;
+        }
+
+        .monaco-editor .codicon-folding-collapsed,
+        .monaco-editor .codicon-folding-expanded {
+            color: #007acc !important;
+            font-weight: bold !important;
+        }
+
+        /* 在你的 CSS 文件中 */
+        .myLineDecoration {
+            background-color: #ee2929;
+        }
+
+        /* 下拉菜单容器：设置为相对定位，以便子元素绝对定位 */
+        .toolbar-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        /* 下拉菜单内容：默认隐藏 */
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            /* 菜单向左对齐 */
+            top: 100%;
+            background-color: #ffffff;
+            /* 背景色，暗黑模式需改为 #1e1e1e */
+            min-width: 120px;
+            box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            z-index: 1000;
+            /* 确保浮在编辑器上方 */
+            padding: 5px 0;
+        }
+
+        /* 鼠标悬停在容器上时，显示菜单 */
+        .toolbar-dropdown:hover .dropdown-content {
+            display: block;
+        }
+
+        /* 菜单项样式 */
+        .dropdown-item {
+            color: #333;
+            /* 文字颜色 */
+            padding: 8px 16px;
+            text-decoration: none;
+            display: block;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            /* 图标和文字的间距 */
+            white-space: nowrap;
+        }
+
+        /* 菜单项悬停效果 */
+        .dropdown-item:hover {
+            background-color: #f1f1f1;
+        }
+
+        /* 菜单内部的分隔线 */
+        .dropdown-divider {
+            height: 1px;
+            background-color: #eee;
+            margin: 4px 0;
+        }
+
+        /* 触发按钮样式微调 */
+        .dropdown-btn {
+            cursor: pointer;
+            /* 继承你原有的 mini-btn 样式 */
+        }
+
+        /* 错误徽章容器 */
+        .error-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #fee;
+            /* 浅红色背景 */
+            color: #c00;
+            /* 深红色文字 */
+            border: 1px solid #fcc;
+            border-radius: 12px;
+            /* 圆角胶囊状 */
+            padding: 2px 8px;
+            margin: 0 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        /* 悬停效果 */
+        .error-badge:hover {
+            background-color: #fcc;
+            transform: translateY(-1px);
+        }
+
+        /* 图标微调 */
+        .error-icon {
+            margin-right: 4px;
+            font-size: 14px;
+        }
+
+        /* 警告徽章容器 */
+        .warning-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #fff7ed;
+            /* 浅橙色背景 */
+            color: #c2410c;
+            /* 深橙色文字 */
+            border: 1px solid #ffedd5;
+            border-radius: 12px;
+            /* 圆角胶囊状 */
+            padding: 2px 8px;
+            margin: 0 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        /* 悬停效果 */
+        .warning-badge:hover {
+            background-color: #ffedd5;
+            transform: translateY(-1px);
+        }
+
+        /* 图标微调 */
+        .warning-icon {
+            margin-right: 4px;
+            font-size: 14px;
+        }
+
+        /* 当数量为 0 时，可以让它变灰或者隐藏 (可选) */
+        .warning-badge.zero-warnings {
+            background-color: #f3f4f6;
+            color: #9ca3af;
+            border-color: #e5e7eb;
+            /* display: none; // 如果想在没有警告时隐藏，解开这行 */
+        }
+
+        /* 严重错误：Crash, ANR */
+        .log-decoration-error {
+            background-color: rgba(255, 0, 0, 0.15);
+            /* 浅红背景 */
+            border-left: 3px solid #ff3333;
+        }
+
+        /* 警告：低电量, 掉帧, LMK */
+        .log-decoration-warning {
+            background-color: rgba(255, 165, 0, 0.15);
+            /* 浅橙背景 */
+            border-left: 3px solid #ffa500;
+        }
+
+        /* 侧边栏图标（可选，如果需要侧边栏显示图标） */
+        .log-glyph-error {
+            background: red;
+            width: 5px !important;
+        }
+
+        .log-glyph-warning {
+            background: orange;
+            width: 5px !important;
+        }
+
+        /* 对比分析下拉菜单 */
+        .comparison-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .comparison-btn {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-weight: 600;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .comparison-btn:hover {
+            background-color: #5a6268;
+        }
+
+        .comparison-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            background-color: #ffffff;
+            min-width: 150px;
+            box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            z-index: 1000;
+            padding: 5px 0;
+        }
+
+        .comparison-dropdown:hover .comparison-content {
+            display: block;
+        }
+
+        .comparison-item {
+            color: #333;
+            padding: 8px 16px;
+            text-decoration: none;
+            display: block;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .comparison-item:hover {
+            background-color: #f1f1f1;
+        }

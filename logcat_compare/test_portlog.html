@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>串口Log分析测试</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- DataTables CSS -->
+    <link href="https://cdn.datatables.net/2.3.5/css/dataTables.bootstrap5.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-card {
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-result {
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .success {
+            border-left-color: #28a745;
+        }
+        .error {
+            border-left-color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1 class="mb-4"><i class="bi bi-usb-plug me-2"></i>串口Log分析功能测试</h1>
+        
+        <!-- 测试控制面板 -->
+        <div class="card test-card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-gear me-2"></i>测试控制面板
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="testFileInput" class="form-label fw-bold">选择测试文件</label>
+                            <input type="file" class="form-control" id="testFileInput" accept=".txt">
+                            <div class="form-text">选择 PortLog.txt 文件进行测试</div>
+                        </div>
+                        <button class="btn btn-primary" id="runTestBtn">
+                            <i class="bi bi-play-circle me-1"></i>运行测试
+                        </button>
+                        <button class="btn btn-outline-secondary" id="resetTestBtn">
+                            <i class="bi bi-arrow-clockwise me-1"></i>重置测试
+                        </button>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">测试数据</label>
+                            <textarea class="form-control" id="testDataInput" rows="10" placeholder="或直接粘贴测试数据...">
+[2025-12-06 17:31:05.202147] Runtimes:1
+[2025-12-06 17:31:05.202148] Format: Log Type - Time
+[2025-12-06 17:32:17.892147] Runtimes:2
+[2025-12-06 17:32:17.892148] Format: Log Type - Time
+[2025-12-06 17:33:35.032147] Runtimes:3
+[2025-12-06 17:33:35.032148] Format: Log Type - Time
+[2025-12-06 17:34:51.682147] Runtimes:4
+[2025-12-06 17:34:51.682148] Format: Log Type - Time
+[2025-12-06 17:36:08.332147] Runtimes:5
+[2025-12-06 17:36:08.332148] Format: Log Type - Time
+                            </textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 测试结果 -->
+        <div class="card test-card">
+            <div class="card-header bg-info text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-clipboard-data me-2"></i>测试结果
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="testResults">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        请选择测试文件或使用默认测试数据，然后点击"运行测试"按钮
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 分析结果显示 -->
+        <div class="card test-card">
+            <div class="card-header bg-success text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-table me-2"></i>分析结果预览
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="analysisPreview">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-hourglass-split me-2"></i>
+                        分析结果将在这里显示
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 第三方库 -->
+    <script src="https://code.jquery.com/jquery-3.7.1.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/2.3.5/js/dataTables.js"></script>
+    <script src="https://cdn.datatables.net/2.3.5/js/dataTables.bootstrap5.js"></script>
+    
+    <!-- 串口Log分析器 -->
+    <script src="port_log_analyzer.js"></script>
+    <script src="port_log_analysis_manager.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const testFileInput = document.getElementById('testFileInput');
+            const testDataInput = document.getElementById('testDataInput');
+            const runTestBtn = document.getElementById('runTestBtn');
+            const resetTestBtn = document.getElementById('resetTestBtn');
+            const testResults = document.getElementById('testResults');
+            const analysisPreview = document.getElementById('analysisPreview');
+            
+            let portLogAnalyzer = null;
+            
+            // 初始化分析器
+            function initAnalyzer() {
+                if (window.PortLogAnalyzer) {
+                    portLogAnalyzer = new window.PortLogAnalyzer();
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            
+            // 运行测试
+            async function runTest() {
+                testResults.innerHTML = '<div class="alert alert-info"><i class="bi bi-hourglass-split me-2"></i>测试运行中...</div>';
+                analysisPreview.innerHTML = '<div class="alert alert-info"><i class="bi bi-hourglass-split me-2"></i>分析中...</div>';
+                
+                try {
+                    // 初始化分析器
+                    if (!initAnalyzer()) {
+                        testResults.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>PortLogAnalyzer 未加载</div>';
+                        return;
+                    }
+                    
+                    let testData = '';
+                    
+                    // 获取测试数据
+                    if (testFileInput.files.length > 0) {
+                        const file = testFileInput.files[0];
+                        testData = await file.text();
+                    } else {
+                        testData = testDataInput.value;
+                    }
+                    
+                    // 解析数据
+                    const result = portLogAnalyzer.parsePortLogFile(testData);
+                    
+                    // 显示测试结果
+                    displayTestResults(result);
+                    
+                    // 显示分析结果
+                    displayAnalysisResults(result);
+                    
+                } catch (error) {
+                    testResults.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>测试失败: ' + error.message + '</div>';
+                    console.error('测试失败:', error);
+                }
+            }
+            
+            // 显示测试结果
+            function displayTestResults(result) {
+                let html = '<div class="test-result success">';
+                html += '<h6><i class="bi bi-check-circle me-2"></i>测试成功</h6>';
+                html += '<p>解析完成，共找到 ' + result.runtimes.length + ' 个Runtimes和 ' + result.formatLines.length + ' 个Format行</p>';
+                
+                if (result.runtimes.length > 0) {
+                    html += '<ul>';
+                    result.runtimes.forEach(runtime => {
+                        html += '<li>Runtime ' + runtime.runtime + ': ' + runtime.formattedTime + ' (第' + runtime.lineNumber + '行)</li>';
+                    });
+                    html += '</ul>';
+                }
+                
+                html += '</div>';
+                
+                // 显示分析摘要
+                const analysis = portLogAnalyzer.portLogAnalysis;
+                if (analysis && analysis.stats) {
+                    html += '<div class="test-result">';
+                    html += '<h6><i class="bi bi-bar-chart me-2"></i>分析统计</h6>';
+                    html += '<div class="row">';
+                    html += '<div class="col-md-4"><strong>总Runtimes:</strong> ' + analysis.stats.totalRuntimes + '</div>';
+                    html += '<div class="col-md-4"><strong>平均间隔:</strong> ' + analysis.stats.avgIntervalSeconds + '秒</div>';
+                    html += '<div class="col-md-4"><strong>最小间隔:</strong> ' + analysis.stats.minIntervalSeconds + '秒</div>';
+                    html += '</div>';
+                    html += '<div class="row mt-2">';
+                    html += '<div class="col-md-4"><strong>警告阈值:</strong> ' + analysis.stats.warningThresholdSeconds + '秒</div>';
+                    html += '<div class="col-md-4"><strong>时间间隔警告:</strong> ' + analysis.stats.timeWarningsCount + '个</div>';
+                    html += '<div class="col-md-4"><strong>异常重启:</strong> ' + analysis.stats.abnormalRestartsCount + '个</div>';
+                    html += '</div>';
+                    html += '</div>';
+                }
+                
+                testResults.innerHTML = html;
+            }
+            
+            // 显示分析结果
+            function displayAnalysisResults(result) {
+                const analysis = portLogAnalyzer.portLogAnalysis;
+                
+                if (!analysis || !analysis.timeIntervals) {
+                    analysisPreview.innerHTML = '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>没有分析结果数据</div>';
+                    return;
+                }
+                
+                let html = '<h6>时间间隔分析</h6>';
+                html += '<div class="table-responsive">';
+                html += '<table class="table table-sm table-striped">';
+                html += '<thead><tr><th>FromRuntime</th><th>ToRuntime</th><th>间隔秒数</th><th>状态</th></tr></thead>';
+                html += '<tbody>';
+                
+                analysis.timeIntervals.forEach(interval => {
+                    html += '<tr>';
+                    html += '<td>' + interval.fromRuntime + '</td>';
+                    html += '<td>' + interval.toRuntime + '</td>';
+                    html += '<td>' + interval.intervalSeconds.toFixed(2) + '</td>';
+                    html += '<td>' + (interval.status === 'warning' ? '<span class="badge bg-warning">警告</span>' : '<span class="badge bg-success">正常</span>') + '</td>';
+                    html += '</tr>';
+                });
+                
+                html += '</tbody></table></div>';
+                
+                // 显示重启分析
+                if (analysis.abnormalRestarts.length > 0) {
+                    html += '<h6 class="mt-4">异常重启检测</h6>';
+                    html += '<div class="table-responsive">';
+                    html += '<table class="table table-sm table-striped">';
+                    html += '<thead><tr><th>Runtime</th><th>Format次数</th><th>状态</th><th>描述</th></tr></thead>';
+                    html += '<tbody>';
+                    
+                    analysis.abnormalRestarts.forEach(restart => {
+                        html += '<tr>';
+                        html += '<td>' + restart.runtime + '</td>';
+                        html += '<td>' + restart.formatCount + '</td>';
+                        html += '<td><span class="badge bg-danger">异常</span></td>';
+                        html += '<td>' + restart.description + '</td>';
+                        html += '</tr>';
+                    });
+                    
+                    html += '</tbody></table></div>';
+                }
+                
+                // 显示正常重启
+                if (analysis.normalRestarts.length > 0) {
+                    html += '<h6 class="mt-4">正常重启</h6>';
+                    html += '<div class="table-responsive">';
+                    html += '<table class="table table-sm table-striped">';
+                    html += '<thead><tr><th>Runtime</th><th>Format次数</th><th>状态</th><th>描述</th></tr></thead>';
+                    html += '<tbody>';
+                    
+                    analysis.normalRestarts.forEach(restart => {
+                        html += '<tr>';
+                        html += '<td>' + restart.runtime + '</td>';
+                        html += '<td>' + restart.formatCount + '</td>';
+                        html += '<td><span class="badge bg-success">正常</span></td>';
+                        html += '<td>' + restart.description + '</td>';
+                        html += '</tr>';
+                    });
+                    
+                    html += '</tbody></table></div>';
+                }
+                
+                analysisPreview.innerHTML = html;
+            }
+            
+            // 重置测试
+            function resetTest() {
+                testFileInput.value = '';
+                testDataInput.value = '';
+                testResults.innerHTML = '<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>请选择测试文件或使用默认测试数据，然后点击"运行测试"按钮</div>';
+                analysisPreview.innerHTML = '<div class="alert alert-warning"><i class="bi bi-hourglass-split me-2"></i>分析结果将在这里显示</div>';
+                
+                if (portLogAnalyzer) {
+                    portLogAnalyzer.reset();
+                }
+            }
+            
+            // 事件监听
+            runTestBtn.addEventListener('click', runTest);
+            resetTestBtn.addEventListener('click', resetTest);
+            
+            // 初始化
+            initAnalyzer();
+        });
+    </script>
+</body>
+</html>

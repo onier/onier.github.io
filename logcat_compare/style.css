@@ -1,0 +1,1075 @@
+        /* 确保整个页面高度为100% */
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* 侧边栏固定高度和滚动 */
+        .sidebar {
+            height: calc(100vh - 56px);
+            /* 减去导航栏高度 */
+            position: fixed;
+            left: 0;
+            top: 56px;
+            /* 导航栏高度 */
+            overflow-y: auto;
+            z-index: 100;
+        }
+
+        /* 主内容区域滚动 */
+        #mainContent {
+            height: calc(100vh - 56px);
+            /* 减去导航栏高度 */
+            overflow-y: auto;
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+        
+        /* 确保日志分析内容区域填充可用空间 */
+        #logAnalysisContent {
+            min-height: 100%;
+            display: block !important;
+            height: auto !important;
+        }
+        
+        #logAnalysisContent:not(.d-none) {
+            display: block !important;
+        }
+        
+        #logAnalysisContent .card {
+            height: calc(100vh - 200px);
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 767.98px) {
+            .sidebar {
+                position: static;
+                height: auto;
+                margin-bottom: 1rem;
+            }
+
+            #mainContent {
+                height: auto;
+                overflow-y: visible;
+                margin-left: 0;
+            }
+        }
+
+        /* 侧边栏折叠状态样式 */
+        .sidebar.collapsed {
+            width: 60px !important;
+            transition: width 0.3s ease;
+        }
+
+        .sidebar.collapsed .nav-link span,
+        .sidebar.collapsed .text-uppercase,
+        .sidebar.collapsed .d-flex span:first-child,
+        .sidebar.collapsed hr,
+        .sidebar.collapsed .px-3 {
+            display: none !important;
+        }
+
+        .sidebar.collapsed .nav-link {
+            justify-content: center;
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
+
+        .sidebar.collapsed .nav-link i {
+            margin-right: 0 !important;
+            font-size: 1.2rem;
+        }
+
+        .sidebar.collapsed .position-sticky {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+
+        /* 主内容区布局由 flex 控制，无需 margin-left */
+
+        /* 主内容区宽度由 flex 布局控制 */
+
+        /* 折叠按钮图标旋转 */
+        #sidebarToggle i {
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar.collapsed~nav #sidebarToggle i {
+            transform: rotate(180deg);
+        }
+
+        /* 确保表格在移动设备上正常显示 */
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        /* 卡片间距调整 */
+        .card {
+            margin-bottom: 1.5rem;
+        }
+
+        /* 文件分析表格优化样式 - 简化显示 */
+        #fileAnalysisTable_wrapper {
+            width: 100%;
+            overflow: visible !important;
+        }
+
+        #fileAnalysisTable {
+            width: 100% !important;
+            min-width: auto !important;
+        }
+
+        /* 简化表格容器样式 */
+        .table-responsive.file-analysis-container {
+            overflow: visible !important;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 0;
+        }
+
+        /* 响应式表格样式 */
+        #fileAnalysisTable thead th {
+            background-color: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+            white-space: nowrap;
+            padding: 0.75rem;
+        }
+
+        /* 表头 tooltip 样式 */
+        #fileAnalysisTable thead th[title] {
+            cursor: help;
+        }
+
+        /* 表格单元格优化 */
+        #fileAnalysisTable td {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 200px;
+            padding: 0.5rem 0.75rem;
+        }
+
+        #fileAnalysisTable td:hover {
+            overflow: visible;
+            white-space: normal;
+            background-color: #f8f9fa;
+            z-index: 5;
+            position: relative;
+        }
+
+        /* 响应式调整 - 小屏幕时允许水平滚动 */
+        @media (max-width: 768px) {
+            .table-responsive.file-analysis-container {
+                overflow-x: auto !important;
+            }
+
+            #fileAnalysisTable {
+                min-width: 600px !important;
+            }
+        }
+
+        /* 日志对比容器样式 */
+        .log-comparison-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            background-color: #f8f9fa;
+        }
+
+        /* 日志等级颜色 */
+        .log-item-error {
+            background-color: rgba(220, 53, 69, 0.08);
+            border-left-color: #dc3545;
+            color: #dc3545;
+        }
+
+        .log-item-warning {
+            background-color: rgba(255, 193, 7, 0.08);
+            border-left-color: #ffc107;
+            color: #856404;
+        }
+
+        .log-item-info {
+            background-color: rgba(13, 202, 240, 0.05);
+            border-left-color: #0dcaf0;
+            color: #0c5460;
+        }
+
+        .log-item-debug {
+            background-color: rgba(108, 117, 125, 0.05);
+            border-left-color: #6c757d;
+            color: #383d41;
+        }
+
+        .log-item-verbose {
+            background-color: rgba(111, 66, 193, 0.05);
+            border-left-color: #6f42c1;
+            color: #6f42c1;
+        }
+
+        .log-item-default {
+            background-color: white;
+            border-left-color: #dee2e6;
+            color: #212529;
+        }
+
+        /* 对比统计信息 */
+        #matchPercentage {
+            font-size: 1.5rem;
+            padding: 0.5rem 1rem;
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 767.98px) {
+            .log-comparison-container {
+                max-height: 300px;
+            }
+
+            .log-entry {
+                padding: 0.5rem;
+                font-size: 0.8rem;
+            }
+        }
+
+        /* 日志显示区域样式 - 加大高度，支持横向滚动 */
+        .log-display {
+            max-height: 700px;
+            height: 700px;
+            overflow-y: auto;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: nowrap;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 10px;
+        }
+
+        /* 调整日志条目样式以支持横向滚动 */
+        .log-item {
+            padding: 0.1rem 0.3rem;
+            margin-bottom: 0.1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: visible;
+            text-overflow: clip;
+            border-left: 2px solid #dee2e6;
+            min-width: fit-content;
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 767.98px) {
+            .log-display {
+                max-height: 400px;
+                height: 400px;
+                font-size: 11px;
+            }
+        }
+
+        /* ========== 日志分析页面UI改进 ========== */
+
+        /* 改进的卡片阴影和边框 */
+        .card.shadow-sm {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+            border: 1px solid #e9ecef;
+            transition: box-shadow 0.3s ease;
+        }
+
+        .card.shadow-sm:hover {
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12) !important;
+        }
+
+        /* 改进的卡片标题 */
+        .card-header {
+            border-bottom: 2px solid rgba(0, 0, 0, 0.05);
+            padding: 0.75rem 1.25rem;
+        }
+
+        .card-header.bg-primary {
+            background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%) !important;
+        }
+
+        .card-header.bg-success {
+            background: linear-gradient(135deg, #34a853 0%, #0d652d 100%) !important;
+        }
+
+        .card-header.bg-warning {
+            background: linear-gradient(135deg, #fbbc05 0%, #e65100 100%) !important;
+        }
+
+        .card-header.bg-info {
+            background: linear-gradient(135deg, #4285f4 0%, #0d47a1 100%) !important;
+        }
+
+        /* 改进的控制面板 */
+        .filter-controls,
+        .search-controls {
+            background: linear-gradient(to bottom, #ffffff, #f8f9fa) !important;
+            border: 1px solid #e0e0e0 !important;
+            border-radius: 8px !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+        }
+
+        /* 改进的表单控件 */
+        .form-control,
+        .form-select {
+            border: 1px solid #dadce0;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            font-size: 0.875rem;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+        }
+
+        .form-control-sm,
+        .form-select-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8125rem;
+        }
+
+        /* 改进的按钮 */
+        .btn {
+            border-radius: 6px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #0d47a1 0%, #1a73e8 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(26, 115, 232, 0.3);
+        }
+
+        .btn-sm {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.8125rem;
+        }
+
+        /* 改进的标签 */
+        .form-label {
+            font-weight: 600;
+            color: #3c4043;
+            margin-bottom: 0.375rem;
+            font-size: 0.875rem;
+        }
+
+        .form-label.small {
+            font-size: 0.8125rem;
+        }
+
+        /* 改进的日志显示区域 */
+        .log-display {
+            background: linear-gradient(to bottom, #ffffff, #fafafa);
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+        }
+
+        /* 改进的日志条目 */
+        .log-item {
+            padding: 0.25rem 0.5rem;
+            margin-bottom: 0.125rem;
+            border-radius: 4px;
+            transition: background-color 0.15s ease;
+            border-left-width: 3px;
+        }
+
+        .log-item:hover {
+            background-color: rgba(26, 115, 232, 0.05);
+        }
+
+        /* 改进的搜索高亮 */
+        .search-highlight {
+            background-color: #ffeb3b !important;
+            color: #212529 !important;
+            padding: 0 2px;
+            border-radius: 2px;
+            font-weight: bold;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 改进的当前匹配项 */
+        .current-match {
+            background-color: rgba(26, 115, 232, 0.1) !important;
+            border-left: 3px solid #1a73e8 !important;
+            box-shadow: 0 2px 4px rgba(26, 115, 232, 0.1);
+        }
+
+        /* 改进的边框和分隔线 */
+        .border-bottom {
+            border-bottom: 2px solid #e0e0e0 !important;
+        }
+
+        .border-end {
+            border-right: 1px solid #e0e0e0 !important;
+        }
+
+        /* 改进的文本颜色 */
+        .text-muted {
+            color: #5f6368 !important;
+        }
+
+        .text-primary {
+            color: #1a73e8 !important;
+        }
+
+        /* 改进的图标 */
+        .bi {
+            vertical-align: -0.125em;
+        }
+
+        /* 加载动画 */
+        .loading-spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #1a73e8;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* 状态指示器 */
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .status-active {
+            background-color: #34a853;
+        }
+
+        .status-inactive {
+            background-color: #ea4335;
+        }
+
+        .status-loading {
+            background-color: #fbbc05;
+        }
+
+        /* 工具提示改进 */
+        .tooltip-inner {
+            background-color: #3c4043;
+            border-radius: 4px;
+            padding: 6px 10px;
+            font-size: 0.8125rem;
+        }
+
+        /* 响应式调整 - 日志分析页面 */
+        @media (max-width: 992px) {
+            .filter-controls .row.g-2>div {
+                margin-bottom: 0.5rem;
+            }
+
+            .filter-controls .row.g-2>div:last-child {
+                margin-bottom: 0;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .log-display {
+                max-height: 500px;
+                height: 500px;
+            }
+
+            .card-body.p-0 .row.g-0>div {
+                border-right: none !important;
+                border-bottom: 1px solid #e0e0e0;
+            }
+
+            .card-body.p-0 .row.g-0>div:last-child {
+                border-bottom: none;
+            }
+        }
+
+        /* 滚动条美化 */
+        .log-display::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .log-display::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .log-display::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        .log-display::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* 文件选择器改进 */
+        #logFileSelect1,
+        #logFileSelect2 {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 16px 12px;
+            padding-right: 2rem;
+        }
+
+        /* 选择2控件美化 */
+        .select2-container--bootstrap4 .select2-selection {
+            border: 1px solid #dadce0;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .select2-container--bootstrap4 .select2-selection:focus {
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+        }
+
+        /* 操作按钮组改进 */
+        .btn-group .btn {
+            border-radius: 6px;
+        }
+
+        .btn-group .btn:first-child {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        .btn-group .btn:last-child {
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+
+        .btn-group .btn:not(:first-child):not(:last-child) {
+            border-radius: 0;
+        }
+
+        /* 修复Select2在对话框中的z-index问题 */
+        .modal {
+            z-index: 1050 !important;
+        }
+
+        .modal-backdrop {
+            z-index: 1040 !important;
+        }
+
+        .select2-container--open {
+            z-index: 9999 !important;
+        }
+
+        .select2-dropdown {
+            z-index: 9999 !important;
+        }
+
+        /* 确保对话框内容不裁剪下拉菜单 */
+        .modal-body {
+            overflow: visible !important;
+        }
+
+        .modal-content {
+            overflow: visible !important;
+        }
+
+        /* Select2在对话框中的特殊样式 */
+        .modal .select2-container {
+            z-index: 9999 !important;
+        }
+
+        .modal .select2-dropdown {
+            position: absolute;
+            width: 100%;
+            min-width: 100%;
+        }
+
+        /* 确保Select2下拉菜单在对话框上方显示 */
+        .select2-container--bootstrap4.select2-container--open {
+            z-index: 99999 !important;
+        }
+
+        .select2-container--bootstrap4 .select2-dropdown {
+            z-index: 99999 !important;
+        }
+
+        /* 目录选择器样式 */
+        #directoryInput::file-selector-button {
+            display: none;
+        }
+
+        #directoryInput {
+            cursor: pointer;
+        }
+
+        #directoryInput:focus {
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+        }
+
+        /* 目录预览区域样式 */
+        #directoryPreview {
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* 目录文件表格样式 */
+        #directoryFilesTable tbody tr:hover {
+            background-color: rgba(26, 115, 232, 0.05);
+        }
+
+        #directoryFilesTable input[type="checkbox"] {
+            cursor: pointer;
+        }
+
+        /* ========== 仪表板布局优化 ========== */
+
+        /* 文件上传卡片两列布局优化 */
+        .card-body .row.g-4 {
+            min-height: 300px;
+        }
+
+        /* 目录预览区域高度优化 */
+        #directoryPreview .card {
+            height: 100%;
+        }
+
+        /* 表格标签页样式优化 */
+        #analysisTableTabs .nav-link {
+            font-weight: 500;
+            padding: 0.75rem 1.25rem;
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+        }
+
+        #analysisTableTabs .nav-link.active {
+            background-color: #f8f9fa;
+            border-bottom-color: #f8f9fa;
+        }
+
+        /* 表格容器在标签页中的优化 */
+        .tab-content .file-analysis-container {
+            border: none;
+            border-radius: 0;
+        }
+
+/* 上传按钮和目录确认按钮统一大小 */
+#uploadFilesBtn,
+#confirmDirectoryBtn {
+    padding: 0.75rem 2rem;
+    font-size: 1.1rem;
+    min-height: 48px; /* 确保最小高度一致 */
+}
+
+        /* 信息提示框优化 */
+        .alert.alert-light.border {
+            background-color: #f8f9fa;
+            border-color: #dee2e6 !important;
+        }
+
+        /* 表格标签页内容区域 */
+        .tab-content {
+            background-color: #f8f9fa;
+            border-left: 1px solid #dee2e6;
+            border-right: 1px solid #dee2e6;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        /* 移除表格容器的额外边框 */
+        .tab-pane .file-analysis-container {
+            border: none;
+        }
+
+        /* DOS文件分析表格中的logcatfile链接样式 */
+        .logcat-file-link {
+            color: #1a73e8 !important;
+            text-decoration: none;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .logcat-file-link:hover {
+            color: #0d47a1 !important;
+            text-decoration: underline;
+            background-color: rgba(26, 115, 232, 0.05);
+            border-radius: 3px;
+            padding: 1px 3px;
+            margin: -1px -3px;
+        }
+        
+        .logcat-file-link:active {
+            color: #0d47a1 !important;
+            transform: translateY(1px);
+        }
+        
+        /* 确保表格中的链接正确显示 */
+        #dosFileAnalysisTable td a.logcat-file-link {
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        /* 鼠标悬停时显示完整文件名 */
+        #dosFileAnalysisTable td a.logcat-file-link:hover {
+            overflow: visible;
+            white-space: normal;
+            z-index: 10;
+            position: relative;
+            background-color: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        /* ========== ADB时间分析表格样式 ========== */
+        
+        /* ADB时间分析表格样式 */
+        #adbTimeAnalysisTable {
+            font-size: 0.875rem;
+        }
+        
+        #adbTimeAnalysisTable thead th {
+            background-color: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+            white-space: nowrap;
+            padding: 0.75rem;
+            font-weight: 600;
+            color: #3c4043;
+        }
+        
+        #adbTimeAnalysisTable tbody td {
+            padding: 0.5rem 0.75rem;
+            vertical-align: middle;
+        }
+        
+        /* ADB命令数量徽章样式 */
+        #adbTimeAnalysisTable .badge.bg-primary {
+            background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%) !important;
+        }
+        
+        #adbTimeAnalysisTable .badge.bg-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%) !important;
+        }
+        
+        /* 时间间隔徽章样式 */
+        #adbTimeAnalysisTable .badge.bg-info {
+            background: linear-gradient(135deg, #0dcaf0 0%, #0aa2c0 100%) !important;
+        }
+        
+        #adbTimeAnalysisTable .badge.bg-success {
+            background: linear-gradient(135deg, #198754 0%, #0d5c3a 100%) !important;
+        }
+        
+        #adbTimeAnalysisTable .badge.bg-warning {
+            background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%) !important;
+        }
+        
+        /* 查看详情按钮样式 */
+        #adbTimeAnalysisTable .view-details-btn {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+        
+        /* ADB详情模态框样式 */
+        .adb-details table {
+            font-size: 0.8125rem;
+        }
+        
+        .adb-details table thead th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        .adb-details table tbody tr:hover {
+            background-color: rgba(26, 115, 232, 0.05);
+        }
+        
+        .adb-details code {
+            background-color: #f8f9fa;
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            color: #d63384;
+        }
+        
+        /* 统计信息样式 */
+        .adb-details .list-unstyled li {
+            padding: 0.25rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .adb-details .list-unstyled li:last-child {
+            border-bottom: none;
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            #adbTimeAnalysisTable {
+                font-size: 0.75rem;
+            }
+            
+            #adbTimeAnalysisTable .view-details-btn {
+                font-size: 0.7rem;
+                padding: 0.2rem 0.4rem;
+            }
+            
+            .adb-details table {
+                font-size: 0.75rem;
+            }
+        }
+        
+        /* 表格行悬停效果 */
+        #adbTimeAnalysisTable tbody tr:hover {
+            background-color: rgba(26, 115, 232, 0.05);
+        }
+        
+        /* 操作列按钮悬停效果 */
+        #adbTimeAnalysisTable .view-details-btn:hover {
+            background-color: #1a73e8;
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(26, 115, 232, 0.3);
+        }
+
+        /* ========== DataTables Child rows 样式 ========== */
+        
+        /* 展开按钮样式 */
+        #adbTimeAnalysisTable td.details-control {
+            text-align: center;
+            cursor: pointer;
+            padding: 0.5rem !important;
+        }
+        
+        #adbTimeAnalysisTable td.details-control:hover {
+            background-color: rgba(26, 115, 232, 0.05);
+        }
+        
+        #adbTimeAnalysisTable td.details-control i {
+            font-size: 1.2rem;
+            color: #1a73e8;
+            transition: all 0.2s ease;
+        }
+        
+        #adbTimeAnalysisTable td.details-control:hover i {
+            color: #0d47a1;
+            transform: scale(1.1);
+        }
+        
+        /* 展开的行样式 */
+        #adbTimeAnalysisTable tr.shown {
+            background-color: rgba(26, 115, 232, 0.03) !important;
+        }
+        
+        /* 子行样式 */
+        #adbTimeAnalysisTable .adb-details {
+            padding: 1rem !important;
+            background-color: #f8f9fa !important;
+            border-top: 2px solid #dee2e6 !important;
+        }
+        
+        #adbTimeAnalysisTable .adb-details h6 {
+            color: #1a73e8;
+            font-weight: 600;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 0.5rem;
+        }
+        
+        /* 子行中的表格样式 */
+        #adbTimeAnalysisTable .adb-details table {
+            background-color: white;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        #adbTimeAnalysisTable .adb-details table thead th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #3c4043;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        #adbTimeAnalysisTable .adb-details table tbody tr:hover {
+            background-color: rgba(26, 115, 232, 0.05);
+        }
+        
+        /* 统计信息区域样式 */
+        #adbTimeAnalysisTable .adb-details .bg-white {
+            background-color: white !important;
+            border: 1px solid #e0e0e0 !important;
+            border-radius: 8px !important;
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            #adbTimeAnalysisTable td.details-control {
+                padding: 0.3rem !important;
+            }
+            
+            #adbTimeAnalysisTable td.details-control i {
+                font-size: 1rem;
+            }
+            
+            #adbTimeAnalysisTable .adb-details {
+                padding: 0.75rem !important;
+            }
+            
+            #adbTimeAnalysisTable .adb-details table {
+                font-size: 0.75rem;
+            }
+        }
+
+        /* ========== ADB命令详情表格优化 ========== */
+        
+        /* 行间距最小化 */
+        #adbTimeAnalysisTable .adb-details table.table-sm {
+            margin-bottom: 0.5rem !important;
+        }
+        
+        #adbTimeAnalysisTable .adb-details table.table-sm tbody tr {
+            line-height: 1.2 !important;
+            padding-top: 0.1rem !important;
+            padding-bottom: 0.1rem !important;
+        }
+        
+        #adbTimeAnalysisTable .adb-details table.table-sm td {
+            padding: 0.25rem 0.5rem !important;
+            vertical-align: middle !important;
+        }
+        
+        #adbTimeAnalysisTable .adb-details table.table-sm th {
+            padding: 0.3rem 0.5rem !important;
+            font-size: 0.8rem !important;
+        }
+        
+        /* 时间间隔颜色分类 */
+        .time-badge-3s {
+            background: linear-gradient(135deg, #34a853 0%, #0d652d 100%) !important;
+            color: white !important;
+        }
+        
+        .time-badge-5s {
+            background: linear-gradient(135deg, #fbbc05 0%, #e65100 100%) !important;
+            color: white !important;
+        }
+        
+        .time-badge-10s {
+            background: linear-gradient(135deg, #ea4335 0%, #b3140a 100%) !important;
+            color: white !important;
+        }
+        
+        .time-badge-15s {
+            background: linear-gradient(135deg, #8e24aa 0%, #4a148c 100%) !important;
+            color: white !important;
+        }
+        
+        .time-badge-default {
+            background: linear-gradient(135deg, #4285f4 0%, #0d47a1 100%) !important;
+            color: white !important;
+        }
+        
+        /* 徽章通用样式 */
+        #adbTimeAnalysisTable .adb-details .badge {
+            font-size: 0.7rem !important;
+            padding: 0.15rem 0.4rem !important;
+            border-radius: 0.25rem !important;
+            font-weight: 600 !important;
+            min-width: 45px !important;
+            text-align: center !important;
+            display: inline-block !important;
+        }
+        
+        /* 命令代码样式优化 */
+        #adbTimeAnalysisTable .adb-details code.small {
+            font-size: 0.75rem !important;
+            line-height: 1.2 !important;
+            padding: 0.1rem 0.3rem !important;
+            background-color: #f8f9fa !important;
+            border: 1px solid #e0e0e0 !important;
+            border-radius: 3px !important;
+            display: inline-block !important;
+            max-width: 100% !important;
+            overflow-x: auto !important;
+            white-space: pre-wrap !important;
+            word-break: break-all !important;
+        }
+        
+        /* 表格紧凑布局 */
+        #adbTimeAnalysisTable .adb-details .table-responsive {
+            margin-bottom: 0.5rem !important;
+        }
+        
+        /* 统计信息区域紧凑化 */
+        #adbTimeAnalysisTable .adb-details .bg-white {
+            padding: 0.5rem !important;
+            margin-top: 0.5rem !important;
+        }
+        
+        #adbTimeAnalysisTable .adb-details .bg-white .row {
+            margin-bottom: -0.25rem !important;
+        }
+        
+        #adbTimeAnalysisTable .adb-details .bg-white .d-flex {
+            margin-bottom: 0.25rem !important;
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            #adbTimeAnalysisTable .adb-details table.table-sm td {
+                padding: 0.2rem 0.3rem !important;
+                font-size: 0.7rem !important;
+            }
+            
+            #adbTimeAnalysisTable .adb-details table.table-sm th {
+                padding: 0.25rem 0.3rem !important;
+                font-size: 0.75rem !important;
+            }
+            
+            #adbTimeAnalysisTable .adb-details .badge {
+                font-size: 0.65rem !important;
+                padding: 0.1rem 0.3rem !important;
+                min-width: 40px !important;
+            }
+            
+            #adbTimeAnalysisTable .adb-details code.small {
+                font-size: 0.7rem !important;
+            }
+        }
