@@ -548,26 +548,27 @@ function switchToDashboard(event) {
     const logAnalysis = document.getElementById('logAnalysisContent');
     const processAnalysis = document.getElementById('processAnalysisContent');
     
-    // 新系统：使用 active 类
-    dashboard.classList.add('active');
-    logAnalysis.classList.remove('active');
-    processAnalysis.classList.remove('active');
-    
-    // 旧系统：使用 d-none 类（兼容旧代码）
-    dashboard.classList.remove('d-none');
-    logAnalysis.classList.add('d-none');
-    processAnalysis.classList.add('d-none');
-    
-    // 强制设置内联样式确保正确显示/隐藏（使用 !important）
-    dashboard.style.setProperty('display', '', 'important');
-    logAnalysis.style.setProperty('display', 'none', 'important');
-    processAnalysis.style.setProperty('display', 'none', 'important');
+    if (dashboard) {
+        dashboard.classList.remove('d-none');
+        dashboard.classList.add('active');
+    }
+    if (logAnalysis) {
+        logAnalysis.classList.add('d-none');
+        logAnalysis.classList.remove('active');
+    }
+    if (processAnalysis) {
+        processAnalysis.classList.add('d-none');
+        processAnalysis.classList.remove('active');
+    }
 
     // 更新导航激活状态
     updateNavActiveState('dashboard');
 
     // 更新页面标题
     document.title = 'Logcat 分析仪表板';
+    
+    // 保存当前页面状态
+    localStorage.setItem('activePage', 'dashboard');
 }
 
 function switchToLogAnalysis(event) {
@@ -578,26 +579,27 @@ function switchToLogAnalysis(event) {
     const logAnalysis = document.getElementById('logAnalysisContent');
     const processAnalysis = document.getElementById('processAnalysisContent');
     
-    // 新系统：使用 active 类
-    dashboard.classList.remove('active');
-    logAnalysis.classList.add('active');
-    processAnalysis.classList.remove('active');
-    
-    // 旧系统：使用 d-none 类（兼容旧代码）
-    dashboard.classList.add('d-none');
-    logAnalysis.classList.remove('d-none');
-    processAnalysis.classList.add('d-none');
-    
-    // 强制设置内联样式确保正确显示/隐藏（使用 !important）
-    dashboard.style.setProperty('display', 'none', 'important');
-    logAnalysis.style.setProperty('display', '', 'important');
-    processAnalysis.style.setProperty('display', 'none', 'important');
+    if (dashboard) {
+        dashboard.classList.add('d-none');
+        dashboard.classList.remove('active');
+    }
+    if (logAnalysis) {
+        logAnalysis.classList.remove('d-none');
+        logAnalysis.classList.add('active');
+    }
+    if (processAnalysis) {
+        processAnalysis.classList.add('d-none');
+        processAnalysis.classList.remove('active');
+    }
 
     // 更新导航激活状态
     updateNavActiveState('logAnalysis');
 
     // 更新页面标题
     document.title = '日志分析 - Logcat 分析仪表板';
+    
+    // 保存当前页面状态
+    localStorage.setItem('activePage', 'logAnalysis');
 
     // 切换到日志分析页面时，更新文件选择器
     if (window.logcatComparisonManager) {
@@ -616,30 +618,31 @@ function switchToProcessAnalysis(event) {
     const logAnalysis = document.getElementById('logAnalysisContent');
     const processAnalysis = document.getElementById('processAnalysisContent');
     
-    // 新系统：使用 active 类
-    dashboard.classList.remove('active');
-    logAnalysis.classList.remove('active');
-    processAnalysis.classList.add('active');
-    
-    // 旧系统：使用 d-none 类（兼容旧代码）
-    dashboard.classList.add('d-none');
-    logAnalysis.classList.add('d-none');
-    processAnalysis.classList.remove('d-none');
-    
-    // 强制设置内联样式确保正确显示/隐藏（使用 !important）
-    dashboard.style.setProperty('display', 'none', 'important');
-    logAnalysis.style.setProperty('display', 'none', 'important');
-    processAnalysis.style.setProperty('display', '', 'important');
+    if (dashboard) {
+        dashboard.classList.add('d-none');
+        dashboard.classList.remove('active');
+    }
+    if (logAnalysis) {
+        logAnalysis.classList.add('d-none');
+        logAnalysis.classList.remove('active');
+    }
+    if (processAnalysis) {
+        processAnalysis.classList.remove('d-none');
+        processAnalysis.classList.add('active');
+    }
 
     // 更新导航激活状态
     updateNavActiveState('processAnalysis');
 
     // 更新页面标题
     document.title = '进程分析 - Logcat 分析仪表板';
+    
+    // 保存当前页面状态
+    localStorage.setItem('activePage', 'processAnalysis');
 }
 
 function updateNavActiveState(activePage) {
-    // 获取所有导航链接
+    // 获取所有导航链接 - 兼容新旧两种结构
     const navLinks = document.querySelectorAll('.sidebar .nav-link, .sidebar-nav .nav-link');
 
     // 移除所有激活状态
@@ -647,24 +650,25 @@ function updateNavActiveState(activePage) {
         link.classList.remove('active');
     });
 
-    // 根据页面设置激活状态 - 兼容新旧两种导航结构
-    // 新系统：使用 data-page 属性
+    // 根据页面设置激活状态 - 优先使用新的 data-page 属性
     const newNavLink = document.querySelector(`.sidebar-nav .nav-link[data-page="${activePage}"]`);
     if (newNavLink) {
         newNavLink.classList.add('active');
         return;
     }
-    
-    // 旧系统：使用 onclick 属性
+
+    // 兼容旧系统：使用 onclick 属性
+    let targetLink = null;
     if (activePage === 'dashboard') {
-        const oldLink = document.querySelector('.sidebar .nav-link[onclick*="switchToDashboard"]');
-        if (oldLink) oldLink.classList.add('active');
+        targetLink = document.querySelector('.sidebar .nav-link[onclick*="switchToDashboard"]');
     } else if (activePage === 'logAnalysis') {
-        const oldLink = document.querySelector('.sidebar .nav-link[onclick*="switchToLogAnalysis"]');
-        if (oldLink) oldLink.classList.add('active');
+        targetLink = document.querySelector('.sidebar .nav-link[onclick*="switchToLogAnalysis"]');
     } else if (activePage === 'processAnalysis') {
-        const oldLink = document.querySelector('.sidebar .nav-link[onclick*="switchToProcessAnalysis"]');
-        if (oldLink) oldLink.classList.add('active');
+        targetLink = document.querySelector('.sidebar .nav-link[onclick*="switchToProcessAnalysis"]');
+    }
+    
+    if (targetLink) {
+        targetLink.classList.add('active');
     }
 }
 

@@ -691,14 +691,6 @@ class LogcatComparisonManager {
         if (resetFilter1) {
             resetFilter1.addEventListener('click', () => this.resetFilter(1));
         }
-        
-        // Golden Layout 中的过滤按钮（使用事件委托）
-        document.addEventListener('click', (e) => {
-            const target = e.target.closest('.gl-reset-filter-btn');
-            if (target) {
-                this.resetFilter(1);
-            }
-        });
 
         // 图表2不再有过滤功能，所以不初始化图表2的过滤事件监听器
 
@@ -947,11 +939,9 @@ class LogcatComparisonManager {
      */
     updateFilterStatus(chartNum) {
         const filterStatusElement = document.getElementById(`filterStatus${chartNum}`);
-        
+        if (!filterStatusElement) return;
+
         const filterState = chartNum === 1 ? this.filterState1 : this.filterState2;
-        
-        let statusText = '';
-        let statusClass = '';
 
         if (filterState.isActive) {
             const conditions = [];
@@ -984,25 +974,12 @@ class LogcatComparisonManager {
                 conditions.push(`显示原始过滤`);
             }
 
-            statusText = `已应用过滤: ${conditions.join(', ')}`;
-            statusClass = 'small text-success fw-bold';
+            filterStatusElement.textContent = `已应用过滤: ${conditions.join(', ')}`;
+            filterStatusElement.className = 'small text-success fw-bold';
         } else {
-            statusText = '未应用过滤';
-            statusClass = 'small text-muted';
+            filterStatusElement.textContent = '未应用过滤';
+            filterStatusElement.className = 'small text-muted';
         }
-        
-        // 更新原始状态元素
-        if (filterStatusElement) {
-            filterStatusElement.textContent = statusText;
-            filterStatusElement.className = statusClass;
-        }
-        
-        // 更新 Golden Layout 中的状态元素
-        const glStatusElements = document.querySelectorAll('.gl-filter-status');
-        glStatusElements.forEach(el => {
-            el.textContent = statusText;
-            el.className = `gl-filter-status ${statusClass}`;
-        });
     }
 
     /**
@@ -1045,7 +1022,7 @@ class LogcatComparisonManager {
                 placeholder: '选择标签...',
                 allowClear: true,
                 width: '100%',
-                dropdownParent: $(document.body)
+                dropdownParent: modalElement ? $(modalElement) : $(document.body)
             });
         }
 
@@ -1057,7 +1034,7 @@ class LogcatComparisonManager {
                 placeholder: '选择级别...',
                 allowClear: true,
                 width: '100%',
-                dropdownParent: $(document.body)
+                dropdownParent: modalElement ? $(modalElement) : $(document.body)
             });
         }
 
@@ -1069,7 +1046,46 @@ class LogcatComparisonManager {
                 placeholder: '选择PID...',
                 allowClear: true,
                 width: '100%',
-                dropdownParent: $(document.body)
+                dropdownParent: modalElement ? $(modalElement) : $(document.body)
+            });
+        }
+        
+        // 添加对话框显示时的Select2重新初始化
+        if (modalElement) {
+            $(modalElement).on('shown.bs.modal', function () {
+                // 重新初始化Select2以确保下拉菜单正确显示
+                if (tagSelect && $(tagSelect).data('select2')) {
+                    $(tagSelect).select2('destroy');
+                    $(tagSelect).select2({
+                        theme: 'bootstrap4',
+                        placeholder: '选择标签...',
+                        allowClear: true,
+                        width: '100%',
+                        dropdownParent: $(modalElement)
+                    });
+                }
+                
+                if (levelSelect && $(levelSelect).data('select2')) {
+                    $(levelSelect).select2('destroy');
+                    $(levelSelect).select2({
+                        theme: 'bootstrap4',
+                        placeholder: '选择级别...',
+                        allowClear: true,
+                        width: '100%',
+                        dropdownParent: $(modalElement)
+                    });
+                }
+                
+                if (pidSelect && $(pidSelect).data('select2')) {
+                    $(pidSelect).select2('destroy');
+                    $(pidSelect).select2({
+                        theme: 'bootstrap4',
+                        placeholder: '选择PID...',
+                        allowClear: true,
+                        width: '100%',
+                        dropdownParent: $(modalElement)
+                    });
+                }
             });
         }
     }

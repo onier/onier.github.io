@@ -511,7 +511,10 @@ class FileAnalysisManager {
 
     initColumnFilterControls() {
         if (document.getElementById('columnFilterBtn')) return;
-        const cardHeader = document.querySelector('.card-header.bg-success .d-flex') ||
+        // 兼容新旧两种卡片头部结构
+        const cardHeader = document.querySelector('.content-card-header.success .d-flex') ||
+            document.querySelector('.content-card-header.success') ||
+            document.querySelector('.card-header.bg-success .d-flex') ||
             document.querySelector('.card-header.bg-success');
         if (!cardHeader) return;
         const btn = document.createElement('button');

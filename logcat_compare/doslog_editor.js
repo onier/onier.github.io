@@ -48,25 +48,12 @@ class DoslogEditor {
      * 初始化DOS日志编辑器（图表2）
      */
     initEditor() {
-        // 优先使用 Golden Layout 中的容器，如果没有则使用原来的容器
-        let containerId = 'glMonacoEditor2';
-        let container = document.getElementById(containerId);
-        
-        // 如果 Golden Layout 容器不存在，使用原来的容器
-        if (!container) {
-            containerId = 'monacoEditorContainer2';
-            container = document.getElementById(containerId);
-        }
+        const containerId = 'monacoEditorContainer2';
+        const container = document.getElementById(containerId);
         
         if (!container) {
-            console.error(`找不到 ${containerId} 元素，将在 500ms 后重试...`);
-            setTimeout(() => this.initEditor(), 500);
+            console.error(`找不到 ${containerId} 元素`);
             return;
-        }
-        
-        // 如果已经初始化过了，销毁旧的编辑器
-        if (this.editor) {
-            this.editor.dispose();
         }
         
         this.editor = monaco.editor.create(container, {
@@ -294,14 +281,9 @@ class DoslogEditor {
         
         if (!doslogs || doslogs.length === 0) {
             this.editor.setValue('没有DOS日志数据...');
-            const emptyMessage = '<i class="bi bi-info-circle me-1"></i>请选择文件或拖拽选择范围以显示DOS日志';
             if (infoElement) {
-                infoElement.innerHTML = emptyMessage;
+                infoElement.innerHTML = '<i class="bi bi-info-circle me-1"></i>请选择文件或拖拽选择范围以显示DOS日志';
             }
-            // 更新 Golden Layout 中的 info
-            document.querySelectorAll('#glTemplateDosEditor .gl-log-info-text').forEach(el => {
-                el.innerHTML = '请选择文件或拖拽选择范围以显示DOS日志';
-            });
             return;
         }
         
@@ -326,14 +308,9 @@ class DoslogEditor {
         this.updateLineNumbersWithGap();
         
         // 更新信息显示
-        const infoText = `显示 ${doslogs.length} 条DOS日志`;
         if (infoElement) {
-            infoElement.innerHTML = `<i class="bi bi-info-circle me-1"></i>${infoText}`;
+            infoElement.innerHTML = `<i class="bi bi-info-circle me-1"></i>显示 ${doslogs.length} 条DOS日志`;
         }
-        // 更新 Golden Layout 中的 info
-        document.querySelectorAll('#glTemplateDosEditor .gl-log-info-text').forEach(el => {
-            el.innerHTML = infoText;
-        });
         
         console.log(`DOS日志编辑器内容已更新: ${doslogs.length} 条记录，时间差已显示在行号区`);
     }

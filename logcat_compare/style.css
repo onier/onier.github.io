@@ -22,6 +22,8 @@
             height: calc(100vh - 56px);
             /* 减去导航栏高度 */
             overflow-y: auto;
+            margin-left: 16.666667%;
+            /* 对应 col-md-3 的宽度 */
             padding-top: 1rem;
             padding-bottom: 1rem;
         }
@@ -86,9 +88,21 @@
             padding-right: 0.5rem;
         }
 
-        /* 主内容区布局由 flex 控制，无需 margin-left */
+        /* 主内容区在侧边栏折叠时的调整 */
+        .sidebar.collapsed+#mainContent {
+            margin-left: 60px !important;
+            transition: margin-left 0.3s ease;
+            width: calc(100% - 60px) !important;
+        }
 
-        /* 主内容区宽度由 flex 布局控制 */
+        /* 确保主内容区在展开时也有正确的宽度 */
+        #mainContent {
+            width: calc(100% - 16.666667%);
+        }
+
+        .sidebar.collapsed+#mainContent {
+            width: calc(100% - 60px) !important;
+        }
 
         /* 折叠按钮图标旋转 */
         #sidebarToggle i {
@@ -604,9 +618,9 @@
         }
 
         .modal .select2-dropdown {
-            position: absolute;
-            width: 100%;
-            min-width: 100%;
+            position: fixed !important;
+            width: auto !important;
+            min-width: 100% !important;
         }
 
         /* 确保Select2下拉菜单在对话框上方显示 */

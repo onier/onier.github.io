@@ -200,27 +200,27 @@ class BootAnomalyDetector {
     const line = lineObj.content;
     const lineNumber = lineObj.lineNumber;
 
-    // // 检测异常重启（不存储所有行，只维护计数器）
-    // if (line.includes('] Runtimes:')) {
-    //   this._lastRuntimeLine = line;
-    //   this._formatCountSinceLastRuntime = 0;
-    // }
-    // if (line.includes('] Format: Log Type - Time') && this._lastRuntimeLine) {
-    //   this._formatCountSinceLastRuntime++;
-    //   // 检测异常重启：如果在上一次 Runtimes 后出现多次 Format
-    //   if (this._formatCountSinceLastRuntime > 1) {
-    //     this.detectionResults.anomalies.push({
-    //       lineNumber: lineNumber,
-    //       ruleId: '异常关机',
-    //       severity: 'ERROR',
-    //       description: '出现异常重启',
-    //       rawContent: this._lastRuntimeLine,
-    //       matchedKeywords: ''
-    //     });
-    //     // 重置计数器，避免重复添加
-    //     this._formatCountSinceLastRuntime = 0;
-    //   }
-    // }
+    // 检测异常重启（不存储所有行，只维护计数器）
+    if (line.includes('] Runtimes:')) {
+      this._lastRuntimeLine = line;
+      this._formatCountSinceLastRuntime = 0;
+    }
+    if (line.includes('] Format: Log Type - Time') && this._lastRuntimeLine) {
+      this._formatCountSinceLastRuntime++;
+      // 检测异常重启：如果在上一次 Runtimes 后出现多次 Format
+      if (this._formatCountSinceLastRuntime > 1) {
+        this.detectionResults.anomalies.push({
+          lineNumber: lineNumber,
+          ruleId: '异常关机',
+          severity: 'ERROR',
+          description: '出现异常重启',
+          rawContent: this._lastRuntimeLine,
+          matchedKeywords: ''
+        });
+        // 重置计数器，避免重复添加
+        this._formatCountSinceLastRuntime = 0;
+      }
+    }
 
     // 为了忽略大小写，统一转为大写进行比对
     const upperLine = line.toUpperCase();
