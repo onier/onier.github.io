@@ -32,10 +32,28 @@ class MarkdownToDocx {
 
     loadScript(src) {
         return new Promise((resolve, reject) => {
+            // 备份 AMD 环境（Monaco Editor 使用）
+            const _define = window.define;
+            const _require = window.require;
+            
+            // 临时禁用 AMD，防止冲突
+            window.define = undefined;
+            window.require = undefined;
+
             const script = document.createElement('script');
             script.src = src;
-            script.onload = resolve;
-            script.onerror = reject;
+            script.onload = () => {
+                // 恢复 AMD 环境
+                window.define = _define;
+                window.require = _require;
+                resolve();
+            };
+            script.onerror = (e) => {
+                // 恢复 AMD 环境
+                window.define = _define;
+                window.require = _require;
+                reject(e);
+            };
             document.head.appendChild(script);
         });
     }
@@ -61,18 +79,37 @@ class MarkdownToDocx {
                 <meta charset="utf-8">
                 <title>${title}</title>
                 <style>
-                    body { font-family: 'Microsoft YaHei', 'SimSun', Arial, sans-serif; }
-                    h1 { font-size: 24pt; color: #333; }
-                    h2 { font-size: 20pt; color: #444; }
-                    h3 { font-size: 16pt; color: #555; }
-                    p { font-size: 12pt; line-height: 1.5; }
-                    code { background: #f4f4f4; padding: 2px 4px; font-family: Consolas, monospace; }
-                    pre { background: #f4f4f4; padding: 10px; overflow-x: auto; }
-                    blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 16px; color: #666; }
-                    table { border-collapse: collapse; width: 100%; }
+                    body { font-family: 'Microsoft YaHei', 'SimSun', Arial, sans-serif; font-size: 12pt; line-height: 1.6; }
+                    h1 { font-size: 24pt; color: #333; margin: 16pt 0 12pt 0; }
+                    h2 { font-size: 20pt; color: #444; margin: 14pt 0 10pt 0; }
+                    h3 { font-size: 16pt; color: #555; margin: 12pt 0 8pt 0; }
+                    p { font-size: 12pt; line-height: 1.5; margin: 8pt 0; }
+                    code { background: #f4f4f4; padding: 2px 4px; font-family: Consolas, monospace; font-size: 11pt; }
+                    pre { background: #f4f4f4; padding: 10px; overflow-x: auto; margin: 10pt 0; }
+                    blockquote { border-left: 4px solid #ddd; margin: 10pt 0; padding-left: 16px; color: #666; }
+                    table { border-collapse: collapse; width: 100%; margin: 10pt 0; }
                     th, td { border: 1px solid #ddd; padding: 8px; }
                     th { background: #f2f2f2; }
                     img { max-width: 100%; height: auto; }
+                    
+                    /* 列表样式 - 修复嵌套列表显示 */
+                    ol, ul { 
+                        margin: 8pt 0; 
+                        padding-left: 24pt; 
+                    }
+                    li { 
+                        margin: 4pt 0; 
+                        line-height: 1.5;
+                    }
+                    /* 嵌套列表缩进 */
+                    ol ol, ol ul, ul ol, ul ul {
+                        margin: 4pt 0;
+                    }
+                    /* 确保有序列表正确计数 */
+                    ol { list-style-type: decimal; }
+                    ol ol { list-style-type: decimal; }
+                    ul { list-style-type: disc; }
+                    ul ul { list-style-type: circle; }
                 </style>
             </head>
             <body>
