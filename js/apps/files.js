@@ -343,6 +343,25 @@ const FileExplorerApp = {
         }
     },
 
+    // 加载 Markdown 转 Word 库
+    async loadMdToDocxLibrary() {
+        if (window.MarkdownToDocx) return;
+        
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'js/md-to-docx.js';
+            script.onload = () => {
+                console.log('MarkdownToDocx library loaded');
+                resolve();
+            };
+            script.onerror = (e) => {
+                console.error('Failed to load MarkdownToDocx:', e);
+                reject(e);
+            };
+            document.head.appendChild(script);
+        });
+    },
+
     // 加载 Vditor 库 (解决 AMD/RequireJS 冲突)
     async loadVditorLibrary() {
         if (window.Vditor) return Promise.resolve();
@@ -830,9 +849,9 @@ const FileExplorerApp = {
 
     // --- 终端逻辑 ---
 
-    // --- 导出指定行范围功能 ---
+    // --- 导出 Word 功能 ---
 
-    exportCurrentFile(instanceId) {
+    async exportCurrentFile(instanceId) {
         const state = this.state[instanceId];
         if (!state) return;
 
@@ -848,7 +867,34 @@ const FileExplorerApp = {
             return;
         }
 
-        this.showExportDialog(instanceId, activeTab.editorInstance, activeTab.name);
+        // 判断是否为 Markdown 文件
+        const isMarkdown = activeTab.name.match(/\.(md|markdown|mdown|mkd)$/i);
+        
+        if (isMarkdown) {
+            // Markdown 导出为 Word
+            await this.exportMarkdownToWord(activeTab);
+        } else {
+            // 其他文件使用文本导出
+            this.showExportDialog(instanceId, activeTab.editorInstance, activeTab.name);
+        }
+    },
+
+    // 导出 Markdown 为 Word
+    async exportMarkdownToWord(activeTab) {
+        try {
+            const editor = activeTab.editorInstance;
+            const content = editor.getValue();
+            const defaultName = activeTab.name.replace(/\.md$/i, '') + '.docx';
+            
+            // 加载转换库
+            await this.loadMdToDocxLibrary();
+            
+            // 执行导出
+            await window.exportMarkdownToDocx(content, defaultName);
+        } catch (err) {
+            console.error('Export error:', err);
+            alert('导出失败: ' + err.message);
+        }
     },
 
     showExportDialog(instanceId, editor, fileName) {
@@ -1126,7 +1172,7 @@ DesktopSystem.registerApp({
                 <!-- 工具栏 -->
                 <div class="fm-toolbar">
                     <button onclick="FileExplorerApp.openRoot('${instanceId}')">📂 打开根目录</button>
-                    <button onclick="FileExplorerApp.exportCurrentFile('${instanceId}')" style="margin-left: auto; margin-right: 10px;">📤 导出日志</button>
+                    <button onclick="FileExplorerApp.exportCurrentFile('${instanceId}')" style="margin-left: auto; margin-right: 10px;">📄 导出Word</button>
                     <button onclick="FileExplorerApp.toggleTerminal('${instanceId}')">💻 终端</button>
                 </div>
 
