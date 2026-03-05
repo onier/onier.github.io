@@ -326,6 +326,11 @@ const FileExplorerApp = {
                     if (originalContent.includes('![') || originalContent.includes('<img')) {
                         this.processImagesAsync(editor, originalContent, tab.parentDirHandle);
                     }
+                    
+                    // 后台处理 emoji 转图片（延迟执行，优先保证编辑器可用）
+                    setTimeout(() => {
+                        this.convertEmojisToImages(editor, contentToShow);
+                    }, 1000);
                 }
             });
 
@@ -353,18 +358,72 @@ const FileExplorerApp = {
             
             // 只有当内容发生变化时才更新
             if (processedContent !== originalContent) {
-                const currentValue = editor.getValue();
-                // 如果用户还没有修改内容，则更新为处理后的内容
-                if (currentValue === originalContent) {
-                    editor.setValue(processedContent);
-                    console.log('Images processed and updated in', Date.now() - startTime, 'ms');
-                } else {
-                    console.log('User already edited, skipping image update');
-                }
+                console.log('Images found and converted, updating editor...');
+                editor.setValue(processedContent);
+                console.log('Images processed and updated in', Date.now() - startTime, 'ms');
+            } else {
+                console.log('No images converted (not found or no local images)');
             }
         } catch (e) {
             console.warn('Async image processing failed:', e);
         }
+    },
+
+    // 将 Markdown 中的 emoji 转换为 base64 图片
+    async convertEmojisToImages(editor, content) {
+        // 检查是否包含 emoji
+        const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu;
+        if (!emojiRegex.test(content)) return;
+        
+        console.log('Converting emojis to images...');
+        
+        // 加载 emoji 转换库
+        if (!window.EmojiToImage) {
+            await this.loadEmojiToImageLibrary();
+        }
+        
+        if (!window.EmojiToImage) {
+            console.warn('EmojiToImage library not loaded');
+            return;
+        }
+        
+        try {
+            const processedContent = await window.EmojiToImage.replaceEmojisWithImages(content, {
+                size: '16px',
+                className: 'emoji-img'
+            });
+            
+            // 如果内容发生变化，更新编辑器
+            if (processedContent !== content) {
+                const currentValue = editor.getValue();
+                // 只有当用户没有修改内容时才更新
+                if (currentValue === content) {
+                    editor.setValue(processedContent);
+                    console.log('Emojis converted to images');
+                }
+            }
+        } catch (e) {
+            console.warn('Emoji conversion failed:', e);
+        }
+    },
+
+    // 加载 Emoji 转图片库
+    async loadEmojiToImageLibrary() {
+        if (window.EmojiToImage) return;
+        
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'js/emoji-to-image.js';
+            script.onload = () => {
+                console.log('EmojiToImage library loaded');
+                resolve();
+            };
+            script.onerror = (e) => {
+                console.error('Failed to load EmojiToImage:', e);
+                reject(e);
+            };
+            document.head.appendChild(script);
+        });
     },
 
     // 加载 Markdown 转 Word 库

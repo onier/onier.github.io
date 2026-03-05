@@ -79,12 +79,22 @@ class MarkdownToDocx {
                 <meta charset="utf-8">
                 <title>${title}</title>
                 <style>
-                    body { font-family: 'Microsoft YaHei', 'SimSun', Arial, sans-serif; font-size: 12pt; line-height: 1.6; }
+                    /* 字体栈：优先使用支持 emoji 的字体 */
+                    body { 
+                        font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'Microsoft YaHei', 'SimSun', Arial, sans-serif; 
+                        font-size: 12pt; 
+                        line-height: 1.6; 
+                    }
                     h1 { font-size: 24pt; color: #333; margin: 16pt 0 12pt 0; }
                     h2 { font-size: 20pt; color: #444; margin: 14pt 0 10pt 0; }
                     h3 { font-size: 16pt; color: #555; margin: 12pt 0 8pt 0; }
                     p { font-size: 12pt; line-height: 1.5; margin: 8pt 0; }
-                    code { background: #f4f4f4; padding: 2px 4px; font-family: Consolas, monospace; font-size: 11pt; }
+                    code { 
+                        background: #f4f4f4; 
+                        padding: 2px 4px; 
+                        font-family: 'Segoe UI Emoji', 'Apple Color Emoji', Consolas, monospace; 
+                        font-size: 11pt; 
+                    }
                     pre { background: #f4f4f4; padding: 10px; overflow-x: auto; margin: 10pt 0; }
                     blockquote { border-left: 4px solid #ddd; margin: 10pt 0; padding-left: 16px; color: #666; }
                     table { border-collapse: collapse; width: 100%; margin: 10pt 0; }
