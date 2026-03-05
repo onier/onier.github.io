@@ -230,102 +230,102 @@ const FileExplorerApp = {
         }
     },
 
-    // --- Vditor Markdown 编辑器集成 ---
+    // --- Vditor Markdown 编辑器集成 (优化版) ---
+    
+    // 预加载 Vditor（在页面加载时调用）
+    preloadVditor() {
+        if (typeof window.Vditor === 'undefined' && !this.vditorLoading) {
+            this.vditorLoading = true;
+            console.log('Preloading Vditor...');
+            this.loadVditorLibrary().then(() => {
+                console.log('Vditor preloaded successfully');
+                this.vditorLoaded = true;
+            }).catch(err => {
+                console.warn('Vditor preload failed:', err);
+            });
+        }
+    },
 
     async initVditor(instanceId, container, fileHandle, tab) {
+        const startTime = Date.now();
         tab.editorType = 'vditor';
-        container.innerHTML = '<div style="color:#999;padding:20px;">正在加载 Markdown 编辑器...</div>';
+        
+        // 先显示加载提示
+        container.innerHTML = '<div style="color:#999;padding:20px;text-align:center;">正在初始化编辑器...</div>';
+        
+        // 并行执行：加载 Vditor + 读取文件内容
+        const loadVditorPromise = typeof window.Vditor === 'undefined' 
+            ? this.loadVditorLibrary() 
+            : Promise.resolve();
+        
+        let originalContent = '';
+        const readFilePromise = fileHandle.getFile()
+            .then(file => file.text())
+            .then(text => { originalContent = text; })
+            .catch(err => { 
+                console.error('Failed to read file:', err);
+                container.innerHTML = `<div style="color:red;padding:20px;">无法读取文件: ${err.message}</div>`;
+            });
 
-        // 确保 Vditor 已加载 - 等待最多 15 秒
-        let waitCount = 0;
-        const maxWait = 150; // 150 * 100ms = 15s
-        while (typeof window.Vditor === 'undefined' && waitCount < maxWait) {
-            await new Promise(r => setTimeout(r, 100));
-            waitCount++;
-        }
-
-        // 如果仍不存在，尝试动态加载
-        if (typeof window.Vditor === 'undefined') {
-            console.log('Vditor not found in window, trying to load...');
-            await this.loadVditorLibrary();
-        }
-
-        // 再次等待加载完成
-        waitCount = 0;
-        while (typeof window.Vditor === 'undefined' && waitCount < maxWait) {
-            await new Promise(r => setTimeout(r, 100));
-            waitCount++;
-        }
+        // 等待两者完成
+        await Promise.all([loadVditorPromise, readFilePromise]);
 
         if (typeof window.Vditor === 'undefined') {
-            console.error('Vditor failed to load after retries');
             container.innerHTML = '<div style="color:red;padding:20px;">错误: Vditor 加载失败<br>请检查网络连接或刷新页面重试</div>';
             return;
         }
 
-        console.log('Vditor loaded successfully, initializing editor...');
+        // 检查文件是否读取成功
+        if (!originalContent && originalContent !== '') {
+            return; // 错误已在上面处理
+        }
+
+        // 创建 Vditor 容器
+        container.innerHTML = '';
+        const vditorId = `vditor-${tab.id}`;
+        const vditorContainer = document.createElement('div');
+        vditorContainer.id = vditorId;
+        vditorContainer.style.width = '100%';
+        vditorContainer.style.height = '100%';
+        container.appendChild(vditorContainer);
 
         try {
-            const file = await fileHandle.getFile();
-            let content = await file.text();
+            // 使用原始内容初始化编辑器（图片路径暂不处理）
+            // 图片将在后台异步处理并更新
+            const contentToShow = originalContent;
 
-            // 处理本地图片：将相对路径转换为 base64
-            const parentDirHandle = tab.parentDirHandle;
-            content = await this.processMarkdownImages(content, parentDirHandle);
-            console.log('Markdown images processed');
-
-            // 清空容器
-            container.innerHTML = '';
-
-            // 创建 Vditor 容器
-            const vditorId = `vditor-${tab.id}`;
-            const vditorContainer = document.createElement('div');
-            vditorContainer.id = vditorId;
-            vditorContainer.style.width = '100%';
-            vditorContainer.style.height = '100%';
-            container.appendChild(vditorContainer);
-
-            // 初始化 Vditor
+            // 初始化 Vditor（精简配置）
             const editor = new Vditor(vditorId, {
                 height: '100%',
-                mode: 'sv', // 分屏模式：编辑 + 预览
+                mode: 'sv',
                 theme: 'classic',
-                placeholder: '在此处输入 Markdown 内容...',
+                placeholder: '正在加载...',
                 cache: { enable: false },
                 toolbar: [
-                    'emoji', 'headings', 'bold', 'italic', 'strike', '|',
-                    'list', 'ordered-list', 'check', 'outdent', 'indent', '|',
-                    'quote', 'line', 'code', 'inline-code', '|',
+                    'headings', 'bold', 'italic', 'strike', '|',
+                    'list', 'ordered-list', 'check', '|',
+                    'quote', 'line', 'code', '|',
                     'table', 'link', '|',
                     'undo', 'redo', '|',
                     'edit-mode', 'fullscreen', 'preview'
                 ],
                 preview: {
-                    delay: 500,
-                    hljs: { 
-                        style: 'github',
-                        lineNumber: true
-                    },
-                    markdown: {
-                        toc: true,
-                        mark: true,
-                        footnotes: true,
-                        autoSpace: true
-                    }
-                },
-                upload: {
-                    accept: 'image/*',
-                    handler: (files) => {
-                        // 本地图片处理：转换为 Blob URL
-                        return this.handleImageUpload(files, parentDir, editor);
-                    }
+                    delay: 300,
+                    hljs: { style: 'github' }
                 },
                 input: (value) => {
                     tab.isDirty = true;
                 },
                 after: () => {
-                    editor.setValue(content);
+                    // 先显示原始内容，让用户可以立即编辑
+                    editor.setValue(contentToShow);
                     tab.editorInstance = editor;
+                    console.log('Vditor initialized in', Date.now() - startTime, 'ms');
+                    
+                    // 后台异步处理图片（不阻塞编辑）
+                    if (originalContent.includes('![') || originalContent.includes('<img')) {
+                        this.processImagesAsync(editor, originalContent, tab.parentDirHandle);
+                    }
                 }
             });
 
@@ -340,6 +340,30 @@ const FileExplorerApp = {
         } catch (e) {
             console.error(e);
             container.innerHTML = `<div style="color:red;padding:20px;">无法读取文件: ${e.message}</div>`;
+        }
+    },
+
+    // 后台异步处理图片（不阻塞编辑器使用）
+    async processImagesAsync(editor, originalContent, parentDirHandle) {
+        console.log('Starting async image processing...');
+        const startTime = Date.now();
+        
+        try {
+            const processedContent = await this.processMarkdownImages(originalContent, parentDirHandle);
+            
+            // 只有当内容发生变化时才更新
+            if (processedContent !== originalContent) {
+                const currentValue = editor.getValue();
+                // 如果用户还没有修改内容，则更新为处理后的内容
+                if (currentValue === originalContent) {
+                    editor.setValue(processedContent);
+                    console.log('Images processed and updated in', Date.now() - startTime, 'ms');
+                } else {
+                    console.log('User already edited, skipping image update');
+                }
+            }
+        } catch (e) {
+            console.warn('Async image processing failed:', e);
         }
     },
 
@@ -362,11 +386,21 @@ const FileExplorerApp = {
         });
     },
 
-    // 加载 Vditor 库 (解决 AMD/RequireJS 冲突)
+    // 加载 Vditor 库 (解决 AMD/RequireJS 冲突，带并发控制)
     async loadVditorLibrary() {
+        // 已加载直接返回
         if (window.Vditor) return Promise.resolve();
+        
+        // 正在加载中，返回已有的 Promise
+        if (this.vditorLoadPromise) {
+            console.log('Vditor loading in progress, waiting...');
+            return this.vditorLoadPromise;
+        }
 
-        return new Promise((resolve) => {
+        // 创建新的加载 Promise
+        this.vditorLoadPromise = new Promise((resolve) => {
+            const startLoadTime = Date.now();
+            
             // 加载 CSS
             if (!document.querySelector('link[href*="vditor"]')) {
                 console.log('Loading Vditor CSS...');
@@ -393,7 +427,8 @@ const FileExplorerApp = {
                 // 3. 恢复 AMD 环境
                 window.define = _define;
                 window.require = _require;
-                console.log('Vditor loaded successfully, AMD restored');
+                const loadTime = Date.now() - startLoadTime;
+                console.log(`Vditor loaded successfully in ${loadTime}ms, AMD restored`);
                 resolve();
             };
             script.onerror = (e) => {
@@ -405,6 +440,8 @@ const FileExplorerApp = {
             };
             document.head.appendChild(script);
         });
+
+        return this.vditorLoadPromise;
     },
 
     // 获取文件的父目录
@@ -1167,6 +1204,16 @@ DesktopSystem.registerApp({
 
     content: (instanceId) => {
         FileExplorerApp.initState(instanceId);
+        
+        // 延迟预加载 Vditor（页面加载完成后，不阻塞资源管理器）
+        if (!FileExplorerApp.vditorPreloadScheduled) {
+            FileExplorerApp.vditorPreloadScheduled = true;
+            setTimeout(() => {
+                console.log('Scheduling Vditor preload...');
+                FileExplorerApp.preloadVditor();
+            }, 2000); // 2秒后开始预加载
+        }
+        
         return `
             <div class="fm-layout">
                 <!-- 工具栏 -->
