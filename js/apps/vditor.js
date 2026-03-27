@@ -564,3 +564,42 @@ if (!document.querySelector('style[data-vditor-style]')) {
     style.setAttribute('data-vditor-style', 'true');
     document.head.appendChild(style);
 }
+
+// 添加全宽样式 - 让编辑器内容铺满
+const fullWidthStyle = document.createElement('style');
+fullWidthStyle.textContent = `
+/* 编辑器内容铺满，不留两侧空白 */
+.vditor .vditor-preview {
+    max-width: none !important;
+    padding: 0 !important;
+}
+.vditor .vditor-reset {
+    max-width: none !important;
+    padding: 10px 20px !important;
+}
+.vditor-sv__textarea {
+    max-width: none !important;
+    padding: 10px 20px !important;
+}
+.vditor-ir__textarea {
+    max-width: none !important;
+    padding: 10px 20px !important;
+}
+.vditor-wysiwyg {
+    max-width: none !important;
+    padding: 10px 20px !important;
+}
+.vditor .vditor-content {
+    max-width: none !important;
+}
+.vditor .vditor-sv {
+    max-width: none !important;
+}
+.vditor .vditor-ir {
+    max-width: none !important;
+}
+`;
+if (!document.querySelector('style[data-vditor-fullwidth]')) {
+    fullWidthStyle.setAttribute('data-vditor-fullwidth', 'true');
+    document.head.appendChild(fullWidthStyle);
+}
